@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { createOTP, verifyOTP } from '../utils/OTPapi';
 
 const log = (message: string, data?: any) => {
@@ -76,12 +76,20 @@ export default function AuthPage() {
       log('Making API call to verifyOTP...');
       const response = await verifyOTP(email, code);
       log('OTP verified successfully, received token');
-      
       // Store the auth token
       log('Storing auth token in AsyncStorage...');
       await AsyncStorage.setItem('auth_token', response.auth_token);
       log('Auth token stored successfully');
-      
+      // Fetch user profile
+      const profileRes = await fetch('https://serenidad.click/mealpack/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth_token: response.auth_token }),
+      });
+      const profileData = await profileRes.json();
+      if (profileData.user_profile) {
+        await AsyncStorage.setItem('user_profile', JSON.stringify(profileData.user_profile));
+      }
       // Navigate to list view
       log('Navigating to list view...');
       router.push('/list');
@@ -97,7 +105,8 @@ export default function AuthPage() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-      <Text style={{ fontSize: 24, marginBottom: 20 }}>Grab your Meal Pack</Text>
+      <Text style={{ fontSize: 24, marginBottom: 8 }}>Grab your Meal Pack</Text>
+      <Text style={{marginBottom: 16}}>Sign up or login with your email</Text>
       
       <View style={{ 
         flexDirection: 'row', 
@@ -201,6 +210,34 @@ export default function AuthPage() {
           )}
         </>
       )}
+
+      <Text style={{ color: '#666', fontSize: 11, marginTop: 24, marginBottom: 0, textAlign: 'center', lineHeight: 18 }}>
+        By continuing you agree to{' '}
+        <Text
+          style={{ color: '#007AFF', textDecorationLine: 'underline' }}
+          onPress={() => Linking.openURL('https://serenidad.click/mealpack/tos')}
+        >
+          terms & conditions
+        </Text>
+        {' '} &amp;{' '}
+        <Text
+          style={{ color: '#007AFF', textDecorationLine: 'underline' }}
+          onPress={() => Linking.openURL('https://serenidad.click/mealpack/pp')}
+        >
+          privacy policy
+        </Text>
+      </Text>
+
+      <Image
+        source={require('../assets/images/mascot.png')}
+        style={{
+          width: 320,
+          height: 320,
+          marginTop: 32,
+          alignSelf: 'center',
+        }}
+        resizeMode="contain"
+      />
     </View>
   );
 } 
