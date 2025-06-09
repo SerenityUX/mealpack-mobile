@@ -13,6 +13,8 @@ expo-env.d.ts
 ios
 /ios
 ios/
+/android
+android/
 
 # Native
 .kotlin/
