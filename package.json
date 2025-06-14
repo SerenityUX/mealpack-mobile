@@ -1,7 +1,7 @@
 {
   "name": "mealpack-mobile",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -37,9 +37,11 @@
     "react-native-context-menu-view": "^1.19.0",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-popup-menu": "^0.17.0",
+    "react-native-qrcode-svg": "^6.3.15",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.10.0",
+    "react-native-svg": "^15.12.0",
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5"
   },
@@ -50,5 +52,11 @@
     "eslint-config-expo": "~9.2.0",
     "typescript": "~5.8.3"
   },
-  "private": true
+  "private": true,
+  "ios": {
+    "infoPlist": {
+      "NSPhotoLibraryUsageDescription": "Allow access to photos to upload recipe images.",
+      "NSCameraUsageDescription": "Allow access to camera to take recipe photos."
+    }
+  }
 }

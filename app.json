@@ -1,23 +1,49 @@
 {
   "expo": {
-    "name": "mealpack-mobile",
+    "name": "Meal Pack",
     "slug": "mealpack-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mealpackmobile",
+    "scheme": "mealpack-mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.thomasstubblefield.mealpack-mobile"
+      "bundleIdentifier": "com.thomasstubblefield.mealpack-mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow access to photos to upload recipe images.",
+        "NSCameraUsageDescription": "Allow access to camera to take recipe photos.",
+        "NSPhotoLibraryAddUsageDescription": "Allow saving photos."
+      },
+      "associatedDomains": ["applinks:mealpackmobile.com"]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "mealpack-mobile",
+              "host": "recipe",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "mealpack-mobile",
+              "host": "claim",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -38,6 +64,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "84616c23-d06b-4f9d-9f67-68c9b8928849"
+      }
     }
   }
 }

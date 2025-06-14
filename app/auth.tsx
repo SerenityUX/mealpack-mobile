@@ -228,6 +228,47 @@ export default function AuthPage() {
         </Text>
       </Text>
 
+      <Pressable 
+        onPress={() => {
+          Alert.alert(
+            'Continue as Guest',
+            'Users will not be able to share recipes with you until you connect your email.',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel'
+              },
+              {
+                text: 'Continue as Guest',
+                onPress: async () => {
+                  try {
+                    setLoading(true);
+                    const response = await fetch('https://serenidad.click/mealpack/createGuestAccount', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' }
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                      throw new Error(data.error || 'Failed to create guest account');
+                    }
+                    await AsyncStorage.setItem('auth_token', data.auth_token);
+                    router.push('/list');
+                  } catch (error: any) {
+                    Alert.alert('Error', error.message || 'Failed to create guest account');
+                  } finally {
+                    setLoading(false);
+                  }
+                }
+              }
+            ]
+          );
+        }}
+      >
+        <Text style={{ color: '#007AFF', fontSize: 11, marginTop: 8, textAlign: 'center' }}>
+          Skip signup and continue as guest
+        </Text>
+      </Pressable>
+
       <Image
         source={require('../assets/images/mascot.png')}
         style={{

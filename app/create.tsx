@@ -35,39 +35,40 @@ export default function CreateView() {
   };
 
   const pickImage = async () => {
-    // Request permission
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      alert('Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
-
-    // Launch image picker
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
-      setLoading(true);
-      setUploadProgress(0);
-      
-      try {
-        const uploadedUrl = await uploadFile(result.assets[0].uri, (progress) => {
-          setUploadProgress(progress);
-        });
-        setImageUrl(uploadedUrl);
-        console.log('Uploaded image URL:', uploadedUrl);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        alert('Failed to upload image. Please try again.');
-      } finally {
-        setLoading(false);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Sorry, we need camera roll permissions to make this work!');
+        return;
       }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 1,
+      });
+      console.log('ImagePicker result:', result);
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0].uri);
+        setLoading(true);
+        setUploadProgress(0);
+        
+        try {
+          const uploadedUrl = await uploadFile(result.assets[0].uri, (progress) => {
+            setUploadProgress(progress);
+          });
+          setImageUrl(uploadedUrl);
+          console.log('Uploaded image URL:', uploadedUrl);
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          alert('Failed to upload image. Please try again.');
+        } finally {
+          setLoading(false);
+        }
+      }
+    } catch (error) {
+      console.error('ImagePicker error:', error);
+      alert('Image picker crashed: ' + error.message);
     }
   };
 

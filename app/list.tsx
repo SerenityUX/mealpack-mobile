@@ -84,10 +84,19 @@ export default function ListView() {
     const unsubscribe = recipeEvents.subscribe((event: any) => {
       if (typeof event === 'string') {
         // Delete
-        setRecipes(prevRecipes => prevRecipes.filter(r => r.id !== event));
+        setRecipes(prevRecipes => prevRecipes.filter(r => r.id.toString() !== event));
       } else if (event && typeof event === 'object' && event.id) {
-        // Edit
-        setRecipes(prevRecipes => prevRecipes.map(r => r.id === event.id ? event : r));
+        // Edit or new recipe from QR code
+        setRecipes(prevRecipes => {
+          const existingRecipeIndex = prevRecipes.findIndex(r => r.id === event.id);
+          if (existingRecipeIndex >= 0) {
+            // Edit existing recipe
+            return prevRecipes.map(r => r.id === event.id ? event : r);
+          } else {
+            // New recipe (from QR code or other source)
+            return [event, ...prevRecipes];
+          }
+        });
       }
     });
 
@@ -190,6 +199,109 @@ export default function ListView() {
     });
   };
 
+  const handleEnterShareCode = () => {
+    Alert.prompt(
+      'Enter Share Code',
+      'Enter the code to claim a recipe',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Claim',
+          onPress: (code) => {
+            if (code && code.trim()) {
+              claimShareCode(code.trim());
+            }
+          }
+        }
+      ],
+      'plain-text'
+    );
+  };
+
+  const claimShareCode = async (shareCode: string) => {
+    try {
+      const auth_token = await getToken();
+      if (!auth_token) {
+        Alert.alert(
+          'Login Required',
+          'You need to be logged in to claim a recipe',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/auth')
+            }
+          ]
+        );
+        return;
+      }
+
+      const response = await fetch('https://serenidad.click/mealpack/claimShareCode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          auth_token,
+          share_code: shareCode
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to claim recipe');
+      }
+
+      // Format the recipe data to match what detail.tsx expects
+      const formattedRecipe = {
+        ...data.recipe,
+        imageData: data.recipe.image_url, // Add imageData field with the image URL
+        image_url: data.recipe.image_url  // Ensure image_url is available for the list view
+      };
+      
+      // Add the new recipe to the state
+      setRecipes(prevRecipes => [formattedRecipe, ...prevRecipes]);
+
+      // Show thank you message with sharer's info
+      if (data.shared_by) {
+        Alert.alert(
+          'Recipe Added!',
+          `Thanks to ${data.shared_by.name}, you now have ${data.recipe.name} in your Meal Pack. Enjoy!`,
+          [
+            {
+              text: 'View Recipe',
+              onPress: () => {
+                // Navigate to the detail page
+                router.push({
+                  pathname: '/detail',
+                  params: {
+                    recipe: JSON.stringify(formattedRecipe),
+                    userId: userProfile?.id?.toString() || '',
+                    sharedBy: JSON.stringify(data.shared_by)
+                  }
+                });
+              }
+            }
+          ]
+        );
+      } else {
+        // Navigate directly to the detail page
+        router.push({
+          pathname: '/detail',
+          params: {
+            recipe: JSON.stringify(formattedRecipe),
+            userId: userProfile?.id?.toString() || ''
+          }
+        });
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to claim recipe');
+    }
+  };
+
   const renderItem = ({ item }: { item: any }) => (
     <RecipeGridItem
       item={item}
@@ -248,9 +360,14 @@ export default function ListView() {
         >
           Meal Pack
         </Text>
-        <Pressable onPress={() => router.push('/create')} style={{ padding: 4 }}>
-          <Ionicons name="add" size={28} color="#007AFF" />
-        </Pressable>
+        <View style={{ flexDirection: 'row' }}>
+          <Pressable onPress={handleEnterShareCode} style={{ padding: 4, marginRight: 10 }}>
+            <Ionicons name="qr-code" size={24} color="#007AFF" />
+          </Pressable>
+          <Pressable onPress={() => router.push('/create')} style={{ padding: 4 }}>
+            <Ionicons name="add" size={28} color="#007AFF" />
+          </Pressable>
+        </View>
       </View>
       
       {/*

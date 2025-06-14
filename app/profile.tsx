@@ -7,6 +7,11 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput
 import { recipeEvents, userProfileEvents } from '../utils/events';
 import { getToken, removeToken } from '../utils/token';
 
+const isValidEmail = (email: string) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export default function ProfileView() {
   const params = useLocalSearchParams();
   const navigation = useNavigation();
@@ -101,8 +106,8 @@ export default function ProfileView() {
     }
     // Launch image picker
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+        mediaTypes: ['images'],
+        allowsEditing: true,
       aspect: [1, 1],
       quality: 0.9,
     });
@@ -340,8 +345,89 @@ export default function ProfileView() {
             </>
           )}
         </View>
-        <Text style={{ fontSize: 18, color: '#666', marginBottom: 8 }}>{user.email}</Text>
+        <Text style={{ fontSize: 18, color: '#666', marginBottom: 8 }}>{user.email || 'Guest User'}</Text>
       </View>
+
+      {/* Connect Email Section for Guest Users */}
+      {!user.email && (
+        <View style={{ width: '100%', marginBottom: 24 }}>
+          <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%', marginBottom: 16 }} />
+          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>Connect Your Email</Text>
+          <Text style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+            Connect your email to enable recipe sharing and access all features.
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <TextInput
+              style={{
+                flex: 1,
+                height: 40,
+                borderWidth: 1,
+                borderColor: '#ccc',
+                borderRadius: 5,
+                paddingHorizontal: 10,
+                marginRight: 10
+              }}
+              placeholder="Enter your email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={nameInput}
+              onChangeText={setNameInput}
+            />
+            <Pressable
+              onPress={async () => {
+                if (!nameInput.trim() || !isValidEmail(nameInput.trim())) {
+                  Alert.alert('Error', 'Please enter a valid email address');
+                  return;
+                }
+                try {
+                  setSavingName(true);
+                  const token = await getToken();
+                  if (!token) {
+                    Alert.alert('Error', 'You must be logged in to connect your email');
+                    return;
+                  }
+                  const response = await fetch('https://serenidad.click/mealpack/connectGuestAccount', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ auth_token: token, email: nameInput.trim() }),
+                  });
+                  const data = await response.json();
+                  if (!response.ok) {
+                    throw new Error(data.error || 'Failed to connect email');
+                  }
+                  // Update local storage and refresh
+                  const updatedUser = { ...user, email: nameInput.trim() };
+                  await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
+                  userProfileEvents.emit(updatedUser);
+                  Alert.alert('Success', 'Email connected successfully!');
+                  router.replace('/auth');
+                } catch (error: any) {
+                  Alert.alert('Error', error.message || 'Failed to connect email');
+                } finally {
+                  setSavingName(false);
+                }
+              }}
+              style={{
+                backgroundColor: '#000000',
+                paddingHorizontal: 15,
+                paddingVertical: 10,
+                borderRadius: 5,
+                height: 40,
+                justifyContent: 'center',
+                opacity: savingName ? 0.7 : 1
+              }}
+              disabled={savingName}
+            >
+              {savingName ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={{ color: 'white' }}>Connect</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {/* Divider and Actions */}
       <View style={{ width: '100%', marginTop: 0 }}>
         {/* Divider */}

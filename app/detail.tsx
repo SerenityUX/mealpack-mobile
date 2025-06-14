@@ -5,6 +5,7 @@ import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { ActionSheetIOS, Alert, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import ContextMenu from 'react-native-context-menu-view';
 import { recipeEvents } from '../utils/events';
+import QRCodeModal from './components/QRCodeModal';
 
 export default function DetailView() {
   const params = useLocalSearchParams();
@@ -14,6 +15,9 @@ export default function DetailView() {
   const [imageError, setImageError] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [sharedBy, setSharedBy] = useState<any>(null);
+  
   let recipe = null;
   if (params.recipe) {
     try {
@@ -28,6 +32,18 @@ export default function DetailView() {
   }
 
   const [currentRecipe, setCurrentRecipe] = useState(recipe);
+
+  // Parse sharedBy info if available
+  useEffect(() => {
+    if (params.sharedBy) {
+      try {
+        const sharedByData = JSON.parse(params.sharedBy as string);
+        setSharedBy(sharedByData);
+      } catch (error) {
+        console.error('Error parsing sharedBy data:', error);
+      }
+    }
+  }, [params.sharedBy]);
 
   useEffect(() => {
     if (params.userId) {
@@ -45,6 +61,16 @@ export default function DetailView() {
       })();
     }
   }, [params.userId]);
+
+  // Ensure we have imageData for the recipe
+  useEffect(() => {
+    if (currentRecipe && !currentRecipe.imageData && currentRecipe.image_url) {
+      setCurrentRecipe({
+        ...currentRecipe,
+        imageData: currentRecipe.image_url
+      });
+    }
+  }, [currentRecipe]);
 
   useEffect(() => {
     const unsubscribe = recipeEvents.subscribe((event: any) => {
@@ -83,8 +109,9 @@ export default function DetailView() {
         throw new Error(data.error || 'Failed to delete recipe');
       }
 
-      // Emit the deletion event
-      recipeEvents.emit(currentRecipe.id);
+      // Emit the deletion event with just the ID string
+      // This matches the expected format in list.tsx for deletion events
+      recipeEvents.emit(currentRecipe.id.toString());
 
       Alert.alert('Success', 'Recipe deleted successfully', [
         {
@@ -259,6 +286,7 @@ export default function DetailView() {
       const actions = [
         ...(isAuthor ? [{ title: 'Edit', systemIcon: 'pencil' }] : []),
         { title: 'Share', systemIcon: 'square.and.arrow.up' },
+        { title: 'QR Code', systemIcon: 'qrcode' },
         { title: 'Delete', systemIcon: 'trash', destructive: true },
       ];
       navigation.setOptions({
@@ -287,6 +315,9 @@ export default function DetailView() {
               if (e.nativeEvent.index === offset) {
                 handleShareRecipe();
               } else if (e.nativeEvent.index === offset + 1) {
+                // Show QR Code modal
+                setQrModalVisible(true);
+              } else if (e.nativeEvent.index === offset + 2) {
                 Alert.alert(
                   'Delete Recipe',
                   'Are you sure you want to delete this recipe?',
@@ -314,10 +345,10 @@ export default function DetailView() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
       {/* Recipe Image */}
-      {currentRecipe.imageData && (
+      {(currentRecipe?.imageData || currentRecipe?.image_url) && (
         <View style={{ width: '100%', aspectRatio: 3/4, borderRadius: 0, overflow: 'hidden', marginBottom: 16 }}>
           <Image
-            source={{ uri: currentRecipe.imageData }}
+            source={{ uri: currentRecipe.imageData || currentRecipe.image_url }}
             style={{ width: '100%', height: '100%' }}
             resizeMode="cover"
             onLoad={() => {
@@ -326,7 +357,7 @@ export default function DetailView() {
             }}
             onError={(error) => {
               console.error('Detail View - Image load error:', error.nativeEvent.error);
-              console.error('Detail View - Failed URL:', currentRecipe.imageData);
+              console.error('Detail View - Failed URL:', currentRecipe.imageData || currentRecipe.image_url);
               setImageLoading(false);
               setImageError(true);
             }}
@@ -334,10 +365,33 @@ export default function DetailView() {
         </View>
       )}
       <View style={{ paddingHorizontal: 20 }}>
+        {/* Shared By Info - Show this if the recipe was shared */}
+        {sharedBy && (
+          <View style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            marginBottom: 16,
+            backgroundColor: '#f0f8ff',
+            padding: 12,
+            borderRadius: 8
+          }}>
+            {sharedBy.profile_picture && (
+              <Image
+                source={{ uri: sharedBy.profile_picture }}
+                style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
+              />
+            )}
+            <Text style={{ fontSize: 15, flex: 1 }}>
+              <Text style={{ fontWeight: 'bold' }}>{sharedBy.name}</Text> shared this recipe with you
+            </Text>
+          </View>
+        )}
+        
         {/* Description */}
         {currentRecipe.description && (
           <Text style={{ fontSize: 18, lineHeight: 26, marginBottom: 16 }}>{currentRecipe.description}</Text>
         )}
+        
         {/* Author */}
         {currentRecipe.author && (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 22 }}>
@@ -350,6 +404,7 @@ export default function DetailView() {
             <Text style={{ fontSize: 17 }}>{currentRecipe.author.name}</Text>
           </View>
         )}
+        
         {/* Ingredients */}
         {currentRecipe.ingredients && currentRecipe.ingredients.length > 0 && (
           <View style={{ marginBottom: 22 }}>
@@ -362,6 +417,7 @@ export default function DetailView() {
             ))}
           </View>
         )}
+        
         {/* Directions */}
         {currentRecipe.directions && currentRecipe.directions.length > 0 && (
           <View style={{ marginBottom: 22 }}>
@@ -375,6 +431,14 @@ export default function DetailView() {
           </View>
         )}
       </View>
+
+      {/* QR Code Modal */}
+      <QRCodeModal
+        visible={qrModalVisible}
+        onClose={() => setQrModalVisible(false)}
+        recipeId={currentRecipe.id}
+        recipeName={currentRecipe.name}
+      />
     </ScrollView>
   );
 } 
