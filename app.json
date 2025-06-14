@@ -43,7 +43,8 @@
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
-      ]
+      ],
+      "package": "com.thomasstubblefield.mealpackmobile"
     },
     "web": {
       "bundler": "metro",
