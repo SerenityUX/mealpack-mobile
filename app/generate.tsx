@@ -3,17 +3,19 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
 } from "react-native";
 import { getToken } from "../utils/token";
 import { uploadFile } from "../utils/uploadFile";
 
-export default function CreateView() {
+export default function GenerateView() {
   const router = useRouter();
   const [recipeName, setRecipeName] = useState("");
   const [recipeDescription, setRecipeDescription] = useState("");
@@ -24,6 +26,15 @@ export default function CreateView() {
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [createLoading, setCreateLoading] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState("");
+  
+  // Generation progress states
+  const [nameGenerated, setNameGenerated] = useState(false);
+  const [descriptionGenerated, setDescriptionGenerated] = useState(false);
+  const [ingredientsGenerated, setIngredientsGenerated] = useState(false);
+  const [directionsGenerated, setDirectionsGenerated] = useState(false);
+  const [generationComplete, setGenerationComplete] = useState(false);
+  const [generationError, setGenerationError] = useState("");
 
   // Create refs for the last input in each list
   const lastIngredientRef = useRef<TextInput>(null);
@@ -56,6 +67,9 @@ export default function CreateView() {
       });
       console.log('ImagePicker result:', result);
       if (!result.canceled) {
+        // Reset all generation states when a new image is selected
+        resetGenerationStates();
+        
         setSelectedImage(result.assets[0].uri);
         setLoading(true);
         setUploadProgress(0);
@@ -66,6 +80,9 @@ export default function CreateView() {
           });
           setImageUrl(uploadedUrl);
           console.log('Uploaded image URL:', uploadedUrl);
+          
+          // Start recipe generation after image upload
+          generateRecipe(result.assets[0].uri);
         } catch (error) {
           console.error('Error uploading image:', error);
           alert('Failed to upload image. Please try again.');
@@ -77,6 +94,170 @@ export default function CreateView() {
       console.error('ImagePicker error:', error);
       alert('Image picker crashed: ' + error);
     }
+  };
+  
+  const resetGenerationStates = () => {
+    setRecipeName("");
+    setRecipeDescription("");
+    setIngredients([""]);
+    setDirections([""]);
+    setNameGenerated(false);
+    setDescriptionGenerated(false);
+    setIngredientsGenerated(false);
+    setDirectionsGenerated(false);
+    setGenerationComplete(false);
+    setGenerationError("");
+    setGenerationStatus("");
+  };
+  
+  const generateRecipe = async (imageUri: string) => {
+    try {
+      setCreateLoading(true);
+      
+      // Create form data with the image
+      const formData = new FormData();
+      // @ts-ignore - TypeScript doesn't like the type here but it works
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'recipe-image.jpg',
+      });
+      
+      const token = await getToken();
+      if (!token) {
+        alert("Please log in to generate a recipe");
+        setCreateLoading(false);
+        return;
+      }
+
+      // Use XMLHttpRequest which has better support for SSE
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://serenidad.click/mealpack/generateRecipe');
+      xhr.setRequestHeader('Content-Type', 'multipart/form-data');
+      
+      // Set up event handlers
+      let buffer = '';
+      
+      xhr.onprogress = (event) => {
+        // Get the new chunk of data
+        const newData = xhr.responseText.substring(buffer.length);
+        buffer += newData;
+        
+        // Process events in the buffer
+        const lines = buffer.split("\n\n");
+        
+        // Keep the last (potentially incomplete) chunk in the buffer
+        if (!newData.endsWith("\n\n")) {
+          buffer = lines.pop() || "";
+        } else {
+          buffer = "";
+        }
+        
+        // Process each complete event
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const eventData = JSON.parse(line.substring(6));
+              console.log("Received event:", eventData);
+              
+              if (eventData.error) {
+                setGenerationError(eventData.error);
+                continue;
+              }
+              
+              // Update UI based on generation progress
+              if (eventData.status === "processing") {
+                // Processing image
+              } else if (eventData.status === "name_generated") {
+                setRecipeName(eventData.recipe.recipe_name);
+                setNameGenerated(true);
+              } else if (eventData.status === "description_generated") {
+                setRecipeDescription(eventData.recipe.recipe_description);
+                setDescriptionGenerated(true);
+              } else if (eventData.status === "ingredients_generated") {
+                setIngredients(eventData.recipe.ingredients);
+                setIngredientsGenerated(true);
+              } else if (eventData.status === "directions_generated") {
+                setDirections(eventData.recipe.directions);
+                setDirectionsGenerated(true);
+              } else if (eventData.status === "completed") {
+                setGenerationComplete(true);
+              }
+            } catch (e) {
+              console.error("Error parsing SSE data:", e, "Raw data:", line);
+            }
+          }
+        }
+      };
+      
+      xhr.onerror = (error) => {
+        console.error("XHR Error:", error);
+        setGenerationError("Network error while generating recipe");
+        setCreateLoading(false);
+      };
+      
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Request completed successfully
+          console.log("Recipe generation completed");
+        } else {
+          // Request failed
+          setGenerationError(`HTTP error ${xhr.status}`);
+        }
+        setCreateLoading(false);
+      };
+      
+      // Send the request
+      xhr.send(formData);
+    } catch (error) {
+      console.error("Error generating recipe:", error);
+      setGenerationError(error instanceof Error ? error.message : "Failed to generate recipe");
+      setCreateLoading(false);
+    }
+  };
+
+  const updateIngredient = (index: number, value: string) => {
+    const newIngredients = [...ingredients];
+    newIngredients[index] = value;
+    setIngredients(newIngredients);
+  };
+
+  const updateDirection = (index: number, value: string) => {
+    const newDirections = [...directions];
+    newDirections[index] = value;
+    setDirections(newDirections);
+  };
+
+  const removeIngredient = (index: number) => {
+    const newIngredients = ingredients.filter((_, i) => i !== index);
+    if (newIngredients.length === 0) {
+      newIngredients.push("");
+    }
+    setIngredients(newIngredients);
+  };
+
+  const removeDirection = (index: number) => {
+    const newDirections = directions.filter((_, i) => i !== index);
+    if (newDirections.length === 0) {
+      newDirections.push("");
+    }
+    setDirections(newDirections);
+  };
+
+  const addNewIngredient = () => {
+    setIngredients([...ingredients, ""]);
+    // Focus the new input after it's rendered
+    setTimeout(() => {
+      lastIngredientRef.current?.focus();
+    }, 100);
+  };
+
+  const addNewDirection = () => {
+    setDirections([...directions, ""]);
+    // Focus the new input after it's rendered
+    setTimeout(() => {
+      lastDirectionRef.current?.focus();
+    }, 100);
   };
 
   const handleCreate = async () => {
@@ -130,50 +311,6 @@ export default function CreateView() {
     }
   };
 
-  const updateIngredient = (index: number, value: string) => {
-    const newIngredients = [...ingredients];
-    newIngredients[index] = value;
-    setIngredients(newIngredients);
-  };
-
-  const updateDirection = (index: number, value: string) => {
-    const newDirections = [...directions];
-    newDirections[index] = value;
-    setDirections(newDirections);
-  };
-
-  const removeIngredient = (index: number) => {
-    const newIngredients = ingredients.filter((_, i) => i !== index);
-    if (newIngredients.length === 0) {
-      newIngredients.push("");
-    }
-    setIngredients(newIngredients);
-  };
-
-  const removeDirection = (index: number) => {
-    const newDirections = directions.filter((_, i) => i !== index);
-    if (newDirections.length === 0) {
-      newDirections.push("");
-    }
-    setDirections(newDirections);
-  };
-
-  const addNewIngredient = () => {
-    setIngredients([...ingredients, ""]);
-    // Focus the new input after it's rendered
-    setTimeout(() => {
-      lastIngredientRef.current?.focus();
-    }, 100);
-  };
-
-  const addNewDirection = () => {
-    setDirections([...directions, ""]);
-    // Focus the new input after it's rendered
-    setTimeout(() => {
-      lastDirectionRef.current?.focus();
-    }, 100);
-  };
-
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
       <TextInput
@@ -185,11 +322,13 @@ export default function CreateView() {
           borderRadius: 5,
           paddingHorizontal: 10,
           marginBottom: 10,
+          backgroundColor: nameGenerated ? "#ffffff" : "#f0f0f0",
         }}
         placeholder="Recipe Name"
         placeholderTextColor="#666"
         value={recipeName}
         onChangeText={setRecipeName}
+        editable={nameGenerated}
       />
 
       {selectedImage ? (
@@ -237,6 +376,25 @@ export default function CreateView() {
                 />
               </View>
             )}
+            {createLoading && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0,0,0,0.3)",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <ActivityIndicator size="large" color="#ffffff" />
+                <Text style={{ color: "white", marginTop: 10 }}>
+                  Generating recipe...
+                </Text>
+              </View>
+            )}
           </View>
         </Pressable>
       ) : (
@@ -253,7 +411,7 @@ export default function CreateView() {
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#666" }}>Recipe Image</Text>
+          <Text style={{ color: "#666" }}>Select Food Image</Text>
         </Pressable>
       )}
 
@@ -268,6 +426,7 @@ export default function CreateView() {
           paddingTop: 10,
           marginBottom: 10,
           textAlignVertical: "top",
+          backgroundColor: descriptionGenerated ? "#ffffff" : "#f0f0f0",
         }}
         placeholder="Recipe Description"
         placeholderTextColor="#666"
@@ -275,6 +434,7 @@ export default function CreateView() {
         onChangeText={setRecipeDescription}
         multiline
         numberOfLines={4}
+        editable={descriptionGenerated}
       />
 
       {/* Ingredients Section */}
@@ -300,23 +460,29 @@ export default function CreateView() {
               borderColor: "#ccc",
               borderRadius: 5,
               paddingHorizontal: 10,
+              backgroundColor: ingredientsGenerated ? "#ffffff" : "#f0f0f0",
             }}
             placeholder="Add ingredient"
             placeholderTextColor="#666"
             value={ingredient}
             onChangeText={(value) => updateIngredient(index, value)}
+            editable={ingredientsGenerated}
           />
-          <Pressable
-            onPress={() => removeIngredient(index)}
-            style={{ marginLeft: 10, padding: 5 }}
-          >
-            <Ionicons name="trash-outline" size={20} color="#666" />
-          </Pressable>
+          {ingredientsGenerated && (
+            <Pressable
+              onPress={() => removeIngredient(index)}
+              style={{ marginLeft: 10, padding: 5 }}
+            >
+              <Ionicons name="trash-outline" size={20} color="#666" />
+            </Pressable>
+          )}
         </View>
       ))}
-      <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
-      </Pressable>
+      {ingredientsGenerated && (
+        <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
+          <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+        </Pressable>
+      )}
 
       {/* Directions Section */}
       <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
@@ -341,23 +507,29 @@ export default function CreateView() {
               borderColor: "#ccc",
               borderRadius: 5,
               paddingHorizontal: 10,
+              backgroundColor: directionsGenerated ? "#ffffff" : "#f0f0f0",
             }}
             placeholder="Add direction"
             placeholderTextColor="#666"
             value={direction}
             onChangeText={(value) => updateDirection(index, value)}
+            editable={directionsGenerated}
           />
-          <Pressable
-            onPress={() => removeDirection(index)}
-            style={{ marginLeft: 10, padding: 5 }}
-          >
-            <Ionicons name="trash-outline" size={20} color="#666" />
-          </Pressable>
+          {directionsGenerated && (
+            <Pressable
+              onPress={() => removeDirection(index)}
+              style={{ marginLeft: 10, padding: 5 }}
+            >
+              <Ionicons name="trash-outline" size={20} color="#666" />
+            </Pressable>
+          )}
         </View>
       ))}
-      <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new direction</Text>
-      </Pressable>
+      {directionsGenerated && (
+        <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
+          <Text style={{ color: "#000000" }}>+ Add new direction</Text>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={handleCreate}
@@ -374,8 +546,15 @@ export default function CreateView() {
         }}
         disabled={loading || !isFormValid() || createLoading}
       >
-        <Text style={{ color: "white" }}>Create</Text>
+        <Text style={{ color: "white" }}>Save Recipe</Text>
       </Pressable>
+      
+      {generationError && (
+        <Text style={styles.errorText}>
+          {generationError}
+        </Text>
+      )}
+      
       {loading && (
         <Text
           style={{
@@ -385,21 +564,17 @@ export default function CreateView() {
             fontSize: 12,
           }}
         >
-          Awaiting image upload to be able to create recipe
-        </Text>
-      )}
-      {createLoading && (
-        <Text
-          style={{
-            textAlign: "center",
-            color: "#666",
-            marginBottom: 40,
-            fontSize: 12,
-          }}
-        >
-          Creating recipe...
+          Uploading image...
         </Text>
       )}
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginVertical: 10,
+  }
+}); 

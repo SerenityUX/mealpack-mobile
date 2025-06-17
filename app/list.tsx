@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, Pressable, RefreshControl, Text, View } from 'react-native';
+import ContextMenu from 'react-native-context-menu-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { recipeEvents, userProfileEvents } from '../utils/events';
 import { getRecipes } from '../utils/getRecipes';
@@ -65,15 +67,104 @@ export default function ListView() {
   const numColumns = 3;
   const padding = 16;
   const itemWidth = (screenWidth - (padding * (numColumns + 1))) / numColumns;
+  const soundRef = useRef<Audio.Sound | null>(null);
+  
+  // Track which items have already played sounds/haptics
+  const viewedItemsRef = useRef<Set<string>>(new Set());
+  
+  // Reset tracked items when recipes change
+  useEffect(() => {
+    viewedItemsRef.current = new Set();
+  }, [recipes]);
+  
+  // Setup audio
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        // Request audio permissions and configure audio mode
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: false,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        }).catch(() => {});
+        
+        // Pre-load sound for faster playback
+        const { sound } = await Audio.Sound.createAsync(
+          require('../assets/popSound.mp3'),
+          { shouldPlay: false }
+        ).catch(() => ({ sound: null }));
+        
+        if (sound) {
+          soundRef.current = sound;
+        }
+      } catch (error) {
+        // Silently ignore errors
+      }
+    };
+    
+    setupAudio();
+    
+    // Clean up sound on unmount
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Function to play the pop sound
+  const playPopSound = async () => {
+    try {
+      let sound = soundRef.current;
+      
+      // If we don't have a pre-loaded sound, create a new one
+      if (!sound) {
+        const soundObject = await Audio.Sound.createAsync(
+          require('../assets/popSound.mp3'),
+          { shouldPlay: false }
+        );
+        sound = soundObject.sound;
+        soundRef.current = sound;
+      }
+      
+      // Reset and play the sound
+      await sound.setPositionAsync(0).catch(() => {});
+      await sound.playAsync().catch(() => {});
+    } catch (error) {
+      // Silently ignore errors
+    }
+  };
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
-    viewableItems.forEach(({ item }) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Filter to only items that haven't been viewed yet
+    const newItems = viewableItems.filter(({ item }) => {
+      const itemId = item.id.toString();
+      if (!viewedItemsRef.current.has(itemId)) {
+        viewedItemsRef.current.add(itemId);
+        return true;
+      }
+      return false;
     });
+    
+    // Only play sound and haptics for new items
+    if (newItems.length > 0) {
+      // Play haptic for the first new item
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      } catch (e) {
+        // Silently ignore haptic errors
+      }
+      
+      // Play sound for the first new item
+      playPopSound();
+    }
   }).current;
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
   }).current;
 
   useEffect(() => {
@@ -94,6 +185,17 @@ export default function ListView() {
             return prevRecipes.map(r => r.id === event.id ? event : r);
           } else {
             // New recipe (from QR code or other source)
+            // Add the recipe ID to the viewed set to prevent duplicate sounds
+            viewedItemsRef.current.add(event.id.toString());
+            
+            // Play sound for new recipe
+            setTimeout(() => {
+              try {
+                playPopSound();
+              } catch (e) {
+                // Silently ignore sound errors
+              }
+            }, 300);
             return [event, ...prevRecipes];
           }
         });
@@ -264,6 +366,18 @@ export default function ListView() {
       
       // Add the new recipe to the state
       setRecipes(prevRecipes => [formattedRecipe, ...prevRecipes]);
+      
+      // Add the recipe ID to the viewed set to prevent duplicate sounds
+      viewedItemsRef.current.add(formattedRecipe.id.toString());
+      
+      // Play pop sound for the new recipe with a slight delay
+      setTimeout(() => {
+        try {
+          playPopSound();
+        } catch (e) {
+          // Silently ignore sound errors
+        }
+      }, 300);
 
       // Show thank you message with sharer's info
       if (data.shared_by) {
@@ -361,12 +475,29 @@ export default function ListView() {
           Meal Pack
         </Text>
         <View style={{ flexDirection: 'row' }}>
-          <Pressable onPress={handleEnterShareCode} style={{ padding: 4, marginRight: 10 }}>
+          {/* <Pressable onPress={handleEnterShareCode} style={{ padding: 4, marginRight: 10 }}>
             <Ionicons name="qr-code" size={24} color="#007AFF" />
-          </Pressable>
-          <Pressable onPress={() => router.push('/create')} style={{ padding: 4 }}>
-            <Ionicons name="add" size={28} color="#007AFF" />
-          </Pressable>
+          </Pressable> */}
+          <ContextMenu
+            actions={[
+              { title: 'Write Recipe', systemIcon: 'pencil' },
+              { title: 'Generate Recipe', systemIcon: 'wand.and.stars' },
+            ]}
+            dropdownMenuMode={true}
+            onPress={(e) => {
+              if (e.nativeEvent.index === 0) {
+                // Write Recipe
+                router.push('/create');
+              } else if (e.nativeEvent.index === 1) {
+                // Generate Recipe
+                router.push('/generate');
+              }
+            }}
+          >
+            <Pressable style={{ padding: 4 }}>
+              <Ionicons name="add" size={28} color="#007AFF" />
+            </Pressable>
+          </ContextMenu>
         </View>
       </View>
       

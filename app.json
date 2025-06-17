@@ -2,7 +2,7 @@
   "expo": {
     "name": "Meal Pack",
     "slug": "mealpack-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mealpack-mobile",
@@ -17,7 +17,9 @@
         "NSCameraUsageDescription": "Allow access to camera to take recipe photos.",
         "NSPhotoLibraryAddUsageDescription": "Allow saving photos."
       },
-      "associatedDomains": ["applinks:mealpackmobile.com"]
+      "associatedDomains": [
+        "applinks:mealpackmobile.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -41,7 +43,10 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "package": "com.thomasstubblefield.mealpackmobile"
@@ -61,7 +66,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
