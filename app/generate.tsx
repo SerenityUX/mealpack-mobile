@@ -1,16 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
 } from "react-native";
 import { getToken } from "../utils/token";
 import { uploadFile } from "../utils/uploadFile";
@@ -27,6 +29,10 @@ export default function GenerateView() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [createLoading, setCreateLoading] = useState(false);
   const [generationStatus, setGenerationStatus] = useState("");
+  const [editRequest, setEditRequest] = useState("");
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isLittleGuy2, setIsLittleGuy2] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   
   // Generation progress states
   const [nameGenerated, setNameGenerated] = useState(false);
@@ -39,6 +45,33 @@ export default function GenerateView() {
   // Create refs for the last input in each list
   const lastIngredientRef = useRef<TextInput>(null);
   const lastDirectionRef = useRef<TextInput>(null);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Keyboard event listeners
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+      
+      // Clear any animation timeout when component unmounts
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const isFormValid = () => {
     const hasValidIngredients = ingredients.some((i) => i.trim() !== "");
@@ -311,270 +344,493 @@ export default function GenerateView() {
     }
   };
 
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
-      <TextInput
-        style={{
-          width: "100%",
-          height: 40,
-          borderWidth: 1,
-          borderColor: "#ccc",
-          borderRadius: 5,
-          paddingHorizontal: 10,
-          marginBottom: 10,
-          backgroundColor: nameGenerated ? "#ffffff" : "#f0f0f0",
-        }}
-        placeholder="Recipe Name"
-        placeholderTextColor="#666"
-        value={recipeName}
-        onChangeText={setRecipeName}
-        editable={nameGenerated}
-      />
+  // Handle edit request submission
+  const handleEditRequest = async () => {
+    if (editRequest.trim() === '' || isRegenerating) return;
+    
+    try {
+      // Set regenerating state to true to prevent multiple requests
+      setIsRegenerating(true);
+      
+      // Create the current recipe object
+      const currentRecipe = {
+        recipe_name: recipeName,
+        recipe_description: recipeDescription,
+        ingredients: ingredients.filter(i => i.trim() !== ""),
+        directions: directions.filter(d => d.trim() !== ""),
+        image_url: imageUrl
+      };
+      
+      // Clear the input field
+      setEditRequest('');
+      
+      // Dismiss keyboard
+      Keyboard.dismiss();
+      
+      // Reset regeneration states but keep the current values
+      setNameGenerated(false);
+      setDescriptionGenerated(false);
+      setIngredientsGenerated(false);
+      setDirectionsGenerated(false);
+      setGenerationComplete(false);
+      
+      console.log('Sending regeneration request with prompt:', editRequest);
+      
+      // Use XMLHttpRequest for SSE support
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://serenidad.click/mealpack/regenerateRecipe');
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      
+      // Set up event handlers
+      let buffer = '';
+      
+      xhr.onprogress = (event) => {
+        // Get the new chunk of data
+        const newData = xhr.responseText.substring(buffer.length);
+        buffer += newData;
+        
+        // Process events in the buffer
+        const lines = buffer.split("\n\n");
+        
+        // Keep the last (potentially incomplete) chunk in the buffer
+        if (!newData.endsWith("\n\n")) {
+          buffer = lines.pop() || "";
+        } else {
+          buffer = "";
+        }
+        
+        // Process each complete event
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const eventData = JSON.parse(line.substring(6));
+              console.log("Received regeneration event:", eventData);
+              
+              if (eventData.error) {
+                setGenerationError(eventData.error);
+                continue;
+              }
+              
+              // Update UI based on regeneration progress
+              if (eventData.status === "processing") {
+                // Processing request
+              } else if (eventData.status === "name_regenerated") {
+                setRecipeName(eventData.recipe.recipe_name);
+                setNameGenerated(true);
+              } else if (eventData.status === "description_regenerated") {
+                setRecipeDescription(eventData.recipe.recipe_description);
+                setDescriptionGenerated(true);
+              } else if (eventData.status === "ingredients_regenerated") {
+                setIngredients(eventData.recipe.ingredients);
+                setIngredientsGenerated(true);
+              } else if (eventData.status === "directions_regenerated") {
+                setDirections(eventData.recipe.directions);
+                setDirectionsGenerated(true);
+              } else if (eventData.status === "completed") {
+                setGenerationComplete(true);
+              }
+            } catch (e) {
+              console.error("Error parsing SSE data:", e, "Raw data:", line);
+            }
+          }
+        }
+      };
+      
+      xhr.onerror = (error) => {
+        console.error("XHR Error during regeneration:", error);
+        setGenerationError("Network error while regenerating recipe");
+        setIsRegenerating(false);
+      };
+      
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Request completed successfully
+          console.log("Recipe regeneration completed");
+        } else {
+          // Request failed
+          setGenerationError(`HTTP error ${xhr.status}`);
+        }
+        setIsRegenerating(false);
+      };
+      
+      // Send the request with recipe and prompt
+      xhr.send(JSON.stringify({
+        recipe: currentRecipe,
+        prompt: editRequest
+      }));
+    } catch (error) {
+      console.error("Error regenerating recipe:", error);
+      setGenerationError(error instanceof Error ? error.message : "Failed to regenerate recipe");
+      setIsRegenerating(false);
+    }
+  };
 
-      {selectedImage ? (
-        <Pressable
-          onPress={pickImage}
-          style={{ marginBottom: 20 }}
-          disabled={loading}
-        >
-          <View
+  // Handle text change with animation
+  const handleTextChange = (text: string) => {
+    setEditRequest(text);
+    
+    // Clear any existing timeout
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+    }
+    
+    // Change to littleGuy2
+    setIsLittleGuy2(true);
+    
+    // Change back to littleGuy1 after 1 second
+    animationTimeoutRef.current = setTimeout(() => {
+      setIsLittleGuy2(false);
+      animationTimeoutRef.current = null;
+    }, 1000);
+  };
+
+  return (
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <View style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 90 }}>
+          <TextInput
+            style={{
+              width: "100%",
+              height: 40,
+              borderWidth: 1,
+              borderColor: "#ccc",
+              borderRadius: 5,
+              paddingHorizontal: 10,
+              marginBottom: 10,
+              backgroundColor: nameGenerated ? "#ffffff" : "#f0f0f0",
+            }}
+            placeholder="Recipe Name"
+            placeholderTextColor="#666"
+            value={recipeName}
+            onChangeText={setRecipeName}
+            editable={nameGenerated && !isRegenerating}
+          />
+
+        {selectedImage ? (
+          <Pressable
+            onPress={pickImage}
+            style={{ marginBottom: 20 }}
+            disabled={loading}
+          >
+            <View
+              style={{
+                width: "100%",
+                aspectRatio: 3 / 4,
+                borderRadius: 5,
+                overflow: "hidden",
+                borderWidth: 1,
+                borderColor: "#ccc",
+              }}
+            >
+              <Image
+                source={{ uri: selectedImage }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+              {loading && (
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    backgroundColor: "rgba(0,0,0,0.5)",
+                    padding: 10,
+                  }}
+                >
+                  <Text style={{ color: "white", textAlign: "center" }}>
+                    Uploading
+                  </Text>
+                  <View
+                    style={{
+                      height: 4,
+                      backgroundColor: "#fff",
+                      width: `${uploadProgress}%`,
+                      marginTop: 5,
+                    }}
+                  />
+                </View>
+              )}
+              {createLoading && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0,0,0,0.3)",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <ActivityIndicator size="large" color="#ffffff" />
+                  <Text style={{ color: "white", marginTop: 10 }}>
+                    Generating recipe...
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={pickImage}
             style={{
               width: "100%",
               aspectRatio: 3 / 4,
-              borderRadius: 5,
-              overflow: "hidden",
               borderWidth: 1,
               borderColor: "#ccc",
+              borderRadius: 5,
+              marginBottom: 20,
+              justifyContent: "center",
+              alignItems: "center",
             }}
           >
-            <Image
-              source={{ uri: selectedImage }}
-              style={{ width: "100%", height: "100%" }}
-              resizeMode="cover"
-            />
-            {loading && (
-              <View
-                style={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                  padding: 10,
-                }}
-              >
-                <Text style={{ color: "white", textAlign: "center" }}>
-                  Uploading
-                </Text>
-                <View
-                  style={{
-                    height: 4,
-                    backgroundColor: "#fff",
-                    width: `${uploadProgress}%`,
-                    marginTop: 5,
-                  }}
-                />
-              </View>
-            )}
-            {createLoading && (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: "rgba(0,0,0,0.3)",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <ActivityIndicator size="large" color="#ffffff" />
-                <Text style={{ color: "white", marginTop: 10 }}>
-                  Generating recipe...
-                </Text>
-              </View>
-            )}
-          </View>
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={pickImage}
+            <Text style={{ color: "#666" }}>Select Food Image</Text>
+          </Pressable>
+        )}
+
+        <TextInput
           style={{
             width: "100%",
-            aspectRatio: 3 / 4,
+            minHeight: 100,
             borderWidth: 1,
             borderColor: "#ccc",
             borderRadius: 5,
-            marginBottom: 20,
-            justifyContent: "center",
-            alignItems: "center",
+            paddingHorizontal: 10,
+            paddingTop: 10,
+            marginBottom: 10,
+            textAlignVertical: "top",
+            backgroundColor: descriptionGenerated ? "#ffffff" : "#f0f0f0",
           }}
-        >
-          <Text style={{ color: "#666" }}>Select Food Image</Text>
-        </Pressable>
-      )}
+          placeholder="Recipe Description"
+          placeholderTextColor="#666"
+          value={recipeDescription}
+          onChangeText={setRecipeDescription}
+          multiline
+          numberOfLines={4}
+          editable={descriptionGenerated && !isRegenerating}
+        />
 
-      <TextInput
-        style={{
-          width: "100%",
-          minHeight: 100,
-          borderWidth: 1,
-          borderColor: "#ccc",
-          borderRadius: 5,
-          paddingHorizontal: 10,
-          paddingTop: 10,
-          marginBottom: 10,
-          textAlignVertical: "top",
-          backgroundColor: descriptionGenerated ? "#ffffff" : "#f0f0f0",
-        }}
-        placeholder="Recipe Description"
-        placeholderTextColor="#666"
-        value={recipeDescription}
-        onChangeText={setRecipeDescription}
-        multiline
-        numberOfLines={4}
-        editable={descriptionGenerated}
-      />
+        {/* Ingredients Section */}
+        <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
+          Ingredients
+        </Text>
+        {ingredients.map((ingredient, index) => (
+          <View
+            key={index}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ marginRight: 10, fontSize: 16 }}>•</Text>
+            <TextInput
+              ref={index === ingredients.length - 1 ? lastIngredientRef : null}
+              style={{
+                flex: 1,
+                height: 40,
+                borderWidth: 1,
+                borderColor: "#ccc",
+                borderRadius: 5,
+                paddingHorizontal: 10,
+                backgroundColor: ingredientsGenerated ? "#ffffff" : "#f0f0f0",
+              }}
+              placeholder="Add ingredient"
+              placeholderTextColor="#666"
+              value={ingredient}
+              onChangeText={(value) => updateIngredient(index, value)}
+              editable={ingredientsGenerated && !isRegenerating}
+            />
+            {ingredientsGenerated && !isRegenerating && (
+              <Pressable
+                onPress={() => removeIngredient(index)}
+                style={{ marginLeft: 10, padding: 5 }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#666" />
+              </Pressable>
+            )}
+          </View>
+        ))}
+        {ingredientsGenerated && !isRegenerating && (
+          <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
+            <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+          </Pressable>
+        )}
 
-      {/* Ingredients Section */}
-      <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Ingredients
-      </Text>
-      {ingredients.map((ingredient, index) => (
-        <View
-          key={index}
+        {/* Directions Section */}
+        <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
+          Directions
+        </Text>
+        {directions.map((direction, index) => (
+          <View
+            key={index}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ marginRight: 10, fontSize: 16 }}>{index + 1}.</Text>
+            <TextInput
+              ref={index === directions.length - 1 ? lastDirectionRef : null}
+              style={{
+                flex: 1,
+                height: 40,
+                borderWidth: 1,
+                borderColor: "#ccc",
+                borderRadius: 5,
+                paddingHorizontal: 10,
+                backgroundColor: directionsGenerated ? "#ffffff" : "#f0f0f0",
+              }}
+              placeholder="Add direction"
+              placeholderTextColor="#666"
+              value={direction}
+              onChangeText={(value) => updateDirection(index, value)}
+              editable={directionsGenerated && !isRegenerating}
+            />
+            {directionsGenerated && !isRegenerating && (
+              <Pressable
+                onPress={() => removeDirection(index)}
+                style={{ marginLeft: 10, padding: 5 }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#666" />
+              </Pressable>
+            )}
+          </View>
+        ))}
+        {directionsGenerated && !isRegenerating && (
+          <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
+            <Text style={{ color: "#000000" }}>+ Add new direction</Text>
+          </Pressable>
+        )}
+
+        <Pressable
+          onPress={handleCreate}
           style={{
-            flexDirection: "row",
+            backgroundColor: "#000000",
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderRadius: 5,
+            width: "100%",
             alignItems: "center",
+            opacity: loading || !isFormValid() || createLoading || isRegenerating ? 0.7 : 1,
+            marginTop: 20,
             marginBottom: 10,
           }}
+          disabled={loading || !isFormValid() || createLoading || isRegenerating}
         >
-          <Text style={{ marginRight: 10, fontSize: 16 }}>•</Text>
-          <TextInput
-            ref={index === ingredients.length - 1 ? lastIngredientRef : null}
-            style={{
-              flex: 1,
-              height: 40,
-              borderWidth: 1,
-              borderColor: "#ccc",
-              borderRadius: 5,
-              paddingHorizontal: 10,
-              backgroundColor: ingredientsGenerated ? "#ffffff" : "#f0f0f0",
-            }}
-            placeholder="Add ingredient"
-            placeholderTextColor="#666"
-            value={ingredient}
-            onChangeText={(value) => updateIngredient(index, value)}
-            editable={ingredientsGenerated}
-          />
-          {ingredientsGenerated && (
-            <Pressable
-              onPress={() => removeIngredient(index)}
-              style={{ marginLeft: 10, padding: 5 }}
-            >
-              <Ionicons name="trash-outline" size={20} color="#666" />
-            </Pressable>
-          )}
-        </View>
-      ))}
-      {ingredientsGenerated && (
-        <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
-          <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+          <Text style={{ color: "white" }}>Save Recipe</Text>
         </Pressable>
-      )}
-
-      {/* Directions Section */}
-      <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Directions
-      </Text>
-      {directions.map((direction, index) => (
-        <View
-          key={index}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 10,
-          }}
-        >
-          <Text style={{ marginRight: 10, fontSize: 16 }}>{index + 1}.</Text>
-          <TextInput
-            ref={index === directions.length - 1 ? lastDirectionRef : null}
+        
+        {generationError && (
+          <Text style={{
+            color: 'red',
+            textAlign: 'center',
+            marginVertical: 10,
+          }}>
+            {generationError}
+          </Text>
+        )}
+        
+        {loading && (
+          <Text
             style={{
-              flex: 1,
-              height: 40,
-              borderWidth: 1,
-              borderColor: "#ccc",
-              borderRadius: 5,
-              paddingHorizontal: 10,
-              backgroundColor: directionsGenerated ? "#ffffff" : "#f0f0f0",
+              textAlign: "center",
+              color: "#666",
+              marginBottom: 40,
+              fontSize: 12,
             }}
-            placeholder="Add direction"
-            placeholderTextColor="#666"
-            value={direction}
-            onChangeText={(value) => updateDirection(index, value)}
-            editable={directionsGenerated}
-          />
-          {directionsGenerated && (
-            <Pressable
-              onPress={() => removeDirection(index)}
-              style={{ marginLeft: 10, padding: 5 }}
-            >
-              <Ionicons name="trash-outline" size={20} color="#666" />
-            </Pressable>
-          )}
-        </View>
-      ))}
-      {directionsGenerated && (
-        <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
-          <Text style={{ color: "#000000" }}>+ Add new direction</Text>
-        </Pressable>
-      )}
-
-      <Pressable
-        onPress={handleCreate}
-        style={{
-          backgroundColor: "#000000",
+          >
+            Uploading image...
+          </Text>
+        )}
+      </ScrollView>
+      
+      {generationComplete && (
+        <View style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 80,
+          backgroundColor: '#fff',
+          width: '100%',
+          borderTopWidth: 1,
+          borderTopColor: '#ccc',
           paddingHorizontal: 20,
-          paddingVertical: 10,
-          borderRadius: 5,
-          width: "100%",
-          alignItems: "center",
-          opacity: loading || !isFormValid() || createLoading ? 0.7 : 1,
-          marginTop: 20,
-          marginBottom: 10,
-        }}
-        disabled={loading || !isFormValid() || createLoading}
-      >
-        <Text style={{ color: "white" }}>Save Recipe</Text>
-      </Pressable>
-      
-      {generationError && (
-        <Text style={styles.errorText}>
-          {generationError}
-        </Text>
+          paddingBottom: 14,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}>
+          <Image 
+            source={isLittleGuy2 ? require('../assets/images/littleGuy2.png') : require('../assets/images/littleGuy1.png')}
+            style={{
+              width: 40, 
+              borderRadius: 8,
+              height: 40,
+              padding: 8,
+              backgroundColor: "#FF8C0B",
+              marginRight: 10,
+              opacity: isRegenerating ? 0.5 : 1
+            }}
+          />
+          <View style={{ 
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: '#ccc',
+            borderRadius: 8,
+            backgroundColor: isRegenerating ? '#f0f0f0' : '#ffffff',
+            paddingHorizontal: 10,
+            height: 40,
+          }}>
+            <TextInput
+              style={{
+                flex: 1,
+                height: 40,
+                paddingVertical: 8,
+                color: isRegenerating ? '#999' : '#000',
+              }}
+              placeholder={isRegenerating ? "Regenerating recipe..." : "Request an edit"}
+              placeholderTextColor={isRegenerating ? '#999' : '#666'}
+              keyboardAppearance="light"
+              value={editRequest}
+              onChangeText={handleTextChange}
+              returnKeyType="send"
+              onSubmitEditing={handleEditRequest}
+              editable={!isRegenerating}
+            />
+            {editRequest.trim() !== '' && !isRegenerating && (
+              <Pressable 
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: '#007AFF',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginLeft: 0,
+                }}
+                onPress={handleEditRequest}
+                disabled={isRegenerating}
+              >
+                <Ionicons name="arrow-up" size={18} color="#fff" />
+              </Pressable>
+            )}
+            {isRegenerating && (
+              <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 5 }} />
+            )}
+          </View>
+        </View>
       )}
-      
-      {loading && (
-        <Text
-          style={{
-            textAlign: "center",
-            color: "#666",
-            marginBottom: 40,
-            fontSize: 12,
-          }}
-        >
-          Uploading image...
-        </Text>
-      )}
-    </ScrollView>
+    </View>
+  </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  errorText: {
-    color: 'red',
-    textAlign: 'center',
-    marginVertical: 10,
-  }
-}); 
