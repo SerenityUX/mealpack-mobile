@@ -15,10 +15,12 @@ import {
   View
 } from "react-native";
 import { getToken } from "../utils/token";
+import { useTranslation } from "../utils/TranslationContext";
 import { uploadFile } from "../utils/uploadFile";
 
 export default function GenerateView() {
   const router = useRouter();
+  const { t, language } = useTranslation();
   const [recipeName, setRecipeName] = useState("");
   const [recipeDescription, setRecipeDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -46,6 +48,7 @@ export default function GenerateView() {
   const lastIngredientRef = useRef<TextInput>(null);
   const lastDirectionRef = useRef<TextInput>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editRequestInputRef = useRef<TextInput>(null);
   
   // Keyboard event listeners
   useEffect(() => {
@@ -72,6 +75,16 @@ export default function GenerateView() {
       }
     };
   }, []);
+  
+  // Effect to focus the input when generation is complete
+  useEffect(() => {
+    if (generationComplete && editRequestInputRef.current) {
+      // Small delay to ensure the component is rendered
+      setTimeout(() => {
+        editRequestInputRef.current?.focus();
+      }, 300);
+    }
+  }, [generationComplete]);
 
   const isFormValid = () => {
     const hasValidIngredients = ingredients.some((i) => i.trim() !== "");
@@ -155,6 +168,13 @@ export default function GenerateView() {
         type: 'image/jpeg',
         name: 'recipe-image.jpg',
       });
+      
+      // Map language to the format expected by the API
+      const apiLanguage = language === 'Spanish' ? 'spanish' : 
+                         language === 'Mandarin' ? 'chinese' : 'english';
+      
+      // Add language parameter
+      formData.append('language', apiLanguage);
       
       const token = await getToken();
       if (!token) {
@@ -453,10 +473,11 @@ export default function GenerateView() {
         setIsRegenerating(false);
       };
       
-      // Send the request with recipe and prompt
+      // Send the request with recipe, prompt and language
       xhr.send(JSON.stringify({
         recipe: currentRecipe,
-        prompt: editRequest
+        prompt: editRequest,
+        language: language === 'Spanish' ? 'spanish' : language === 'Mandarin' ? 'chinese' : 'english'
       }));
     } catch (error) {
       console.error("Error regenerating recipe:", error);
@@ -483,15 +504,27 @@ export default function GenerateView() {
       animationTimeoutRef.current = null;
     }, 1000);
   };
+  
+  // Function to focus the edit request input
+  const focusEditRequestInput = () => {
+    if (editRequestInputRef.current) {
+      editRequestInputRef.current.focus();
+    }
+  };
 
   return (
     <KeyboardAvoidingView 
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      enabled={generationComplete}
     >
       <View style={{ flex: 1 }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 90 }}>
+        <ScrollView 
+          style={{ flex: 1 }} 
+          contentContainerStyle={{ padding: 20, paddingBottom: generationComplete ? 110 : 90 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <TextInput
             style={{
               width: "100%",
@@ -503,7 +536,7 @@ export default function GenerateView() {
               marginBottom: 10,
               backgroundColor: nameGenerated ? "#ffffff" : "#f0f0f0",
             }}
-            placeholder="Recipe Name"
+            placeholder={t('recipeName')}
             placeholderTextColor="#666"
             value={recipeName}
             onChangeText={setRecipeName}
@@ -543,7 +576,7 @@ export default function GenerateView() {
                   }}
                 >
                   <Text style={{ color: "white", textAlign: "center" }}>
-                    Uploading
+                    {t('loading')}
                   </Text>
                   <View
                     style={{
@@ -570,7 +603,7 @@ export default function GenerateView() {
                 >
                   <ActivityIndicator size="large" color="#ffffff" />
                   <Text style={{ color: "white", marginTop: 10 }}>
-                    Generating recipe...
+                    {t('generatingRecipe')}
                   </Text>
                 </View>
               )}
@@ -590,7 +623,7 @@ export default function GenerateView() {
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "#666" }}>Select Food Image</Text>
+            <Text style={{ color: "#666" }}>{t('selectImageToGenerate')}</Text>
           </Pressable>
         )}
 
@@ -607,7 +640,7 @@ export default function GenerateView() {
             textAlignVertical: "top",
             backgroundColor: descriptionGenerated ? "#ffffff" : "#f0f0f0",
           }}
-          placeholder="Recipe Description"
+          placeholder={t('recipeDescription')}
           placeholderTextColor="#666"
           value={recipeDescription}
           onChangeText={setRecipeDescription}
@@ -618,7 +651,7 @@ export default function GenerateView() {
 
         {/* Ingredients Section */}
         <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-          Ingredients
+          {t('ingredients')}
         </Text>
         {ingredients.map((ingredient, index) => (
           <View
@@ -641,7 +674,7 @@ export default function GenerateView() {
                 paddingHorizontal: 10,
                 backgroundColor: ingredientsGenerated ? "#ffffff" : "#f0f0f0",
               }}
-              placeholder="Add ingredient"
+              placeholder={t('addIngredient')}
               placeholderTextColor="#666"
               value={ingredient}
               onChangeText={(value) => updateIngredient(index, value)}
@@ -659,13 +692,13 @@ export default function GenerateView() {
         ))}
         {ingredientsGenerated && !isRegenerating && (
           <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
-            <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+            <Text style={{ color: "#000000" }}>{t('addNewIngredient')}</Text>
           </Pressable>
         )}
 
         {/* Directions Section */}
         <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-          Directions
+          {t('directions')}
         </Text>
         {directions.map((direction, index) => (
           <View
@@ -688,7 +721,7 @@ export default function GenerateView() {
                 paddingHorizontal: 10,
                 backgroundColor: directionsGenerated ? "#ffffff" : "#f0f0f0",
               }}
-              placeholder="Add direction"
+              placeholder={t('addDirection')}
               placeholderTextColor="#666"
               value={direction}
               onChangeText={(value) => updateDirection(index, value)}
@@ -706,7 +739,7 @@ export default function GenerateView() {
         ))}
         {directionsGenerated && !isRegenerating && (
           <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
-            <Text style={{ color: "#000000" }}>+ Add new direction</Text>
+            <Text style={{ color: "#000000" }}>{t('addNewDirection')}</Text>
           </Pressable>
         )}
 
@@ -725,7 +758,7 @@ export default function GenerateView() {
           }}
           disabled={loading || !isFormValid() || createLoading || isRegenerating}
         >
-          <Text style={{ color: "white" }}>Save Recipe</Text>
+          <Text style={{ color: "white" }}>{t('saveChanges')}</Text>
         </Pressable>
         
         {generationError && (
@@ -747,7 +780,7 @@ export default function GenerateView() {
               fontSize: 12,
             }}
           >
-            Uploading image...
+            {t('uploadingImage')}
           </Text>
         )}
       </ScrollView>
@@ -767,38 +800,54 @@ export default function GenerateView() {
           paddingBottom: 14,
           flexDirection: 'row',
           alignItems: 'center',
+          zIndex: 100,
+          elevation: 3,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.01,
+          shadowRadius: 2,
         }}>
-          <Image 
-            source={isLittleGuy2 ? require('../assets/images/littleGuy2.png') : require('../assets/images/littleGuy1.png')}
+          <Pressable 
+            onPress={focusEditRequestInput}
             style={{
-              width: 40, 
-              borderRadius: 8,
-              height: 40,
-              padding: 8,
-              backgroundColor: "#FF8C0B",
               marginRight: 10,
-              opacity: isRegenerating ? 0.5 : 1
             }}
-          />
-          <View style={{ 
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: '#ccc',
-            borderRadius: 8,
-            backgroundColor: isRegenerating ? '#f0f0f0' : '#ffffff',
-            paddingHorizontal: 10,
-            height: 40,
-          }}>
+          >
+            <Image 
+              source={isLittleGuy2 ? require('../assets/images/littleGuy2.png') : require('../assets/images/littleGuy1.png')}
+              style={{
+                width: 40, 
+                borderRadius: 8,
+                height: 40,
+                padding: 8,
+                backgroundColor: "#FF8C0B",
+                opacity: isRegenerating ? 0.5 : 1
+              }}
+            />
+          </Pressable>
+          <Pressable 
+            style={{ 
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#ccc',
+              borderRadius: 8,
+              backgroundColor: isRegenerating ? '#f0f0f0' : '#ffffff',
+              paddingHorizontal: 10,
+              height: 40,
+            }}
+            onPress={focusEditRequestInput}
+          >
             <TextInput
+              ref={editRequestInputRef}
               style={{
                 flex: 1,
                 height: 40,
                 paddingVertical: 8,
                 color: isRegenerating ? '#999' : '#000',
               }}
-              placeholder={isRegenerating ? "Regenerating recipe..." : "Request an edit"}
+              placeholder={isRegenerating ? t('processingEdit') : t('editRecipePrompt')}
               placeholderTextColor={isRegenerating ? '#999' : '#666'}
               keyboardAppearance="light"
               value={editRequest}
@@ -806,6 +855,8 @@ export default function GenerateView() {
               returnKeyType="send"
               onSubmitEditing={handleEditRequest}
               editable={!isRegenerating}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
             {editRequest.trim() !== '' && !isRegenerating && (
               <Pressable 
@@ -816,7 +867,6 @@ export default function GenerateView() {
                   backgroundColor: '#007AFF',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  marginLeft: 0,
                 }}
                 onPress={handleEditRequest}
                 disabled={isRegenerating}
@@ -827,7 +877,7 @@ export default function GenerateView() {
             {isRegenerating && (
               <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 5 }} />
             )}
-          </View>
+          </Pressable>
         </View>
       )}
     </View>

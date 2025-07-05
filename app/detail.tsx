@@ -11,19 +11,23 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
+  StyleSheet,
   Text,
   TextInput,
-  View,
-  StyleSheet,
+  View
 } from "react-native";
 import ContextMenu from "react-native-context-menu-view";
 import { recipeEvents } from "../utils/events";
+import { addToMyPack, getRecipes } from '../utils/getRecipes';
+import { useTranslation } from "../utils/TranslationContext";
 import QRCodeModal from './components/QRCodeModal';
 
 export default function DetailView() {
   const params = useLocalSearchParams();
   const navigation = useNavigation();
   const router = useRouter();
+  const { t } = useTranslation();
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -33,6 +37,7 @@ export default function DetailView() {
   
   const [androidInputVisible, setAndroidInputVisible] = useState(false);
   const [androidInput, setAndroidInput] = useState("");
+  const [userRecipes, setUserRecipes] = useState<any[]>([]);
   let recipe = null;
   if (params.recipe) {
     try {
@@ -105,11 +110,24 @@ export default function DetailView() {
     };
   }, [currentRecipe?.id]);
 
+  useEffect(() => {
+    // Fetch user's recipes for Add to Recipes logic
+    (async () => {
+      try {
+        const data = await getRecipes();
+        setUserRecipes((data.recipes || []).filter((r: any) => r && r.id));
+      } catch {}
+    })();
+  }, []);
+
+  // Defensive check
+  const isInUserRecipes = userRecipes.some((r: any) => r && r.id === currentRecipe?.id);
+
   const handleDeleteRecipe = async () => {
     try {
       const auth_token = await AsyncStorage.getItem("auth_token");
       if (!auth_token) {
-        Alert.alert("Error", "You must be logged in to delete a recipe");
+        Alert.alert(t("error"), "You must be logged in to delete a recipe");
         return;
       }
 
@@ -137,9 +155,9 @@ export default function DetailView() {
       // This matches the expected format in list.tsx for deletion events
       recipeEvents.emit(currentRecipe.id.toString());
 
-      Alert.alert("Success", "Recipe deleted successfully", [
+      Alert.alert(t("success"), "Recipe deleted successfully", [
         {
-          text: "OK",
+          text: t("ok"),
           onPress: () => {
             // Navigate back to the previous screen
             router.back();
@@ -147,22 +165,22 @@ export default function DetailView() {
         },
       ]);
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to delete recipe");
+      Alert.alert(t("error"), error.message || "Failed to delete recipe");
     }
   };
 
-  const handleShareRecipe = async () => {
+  const handleShareByEmail = async () => {
     if (Platform.OS === "ios") {
       Alert.prompt(
-        "Share Recipe",
-        "Enter the email of the person you want to share with:",
+        t("shareRecipeByEmail"),
+        t("enterEmailToShare"),
         async (email) => {
           if (!email) return;
           setSharing(true);
           try {
             const auth_token = await AsyncStorage.getItem("auth_token");
             if (!auth_token) {
-              Alert.alert("Error", "You must be logged in to share a recipe");
+              Alert.alert(t("error"), "You must be logged in to share a recipe");
               return;
             }
             const response = await fetch(
@@ -181,24 +199,24 @@ export default function DetailView() {
             if (!response.ok) {
               if (data.error === "User with provided email not found") {
                 Alert.alert(
-                  "User Not Found",
-                  "No user with that email exists.",
+                  t("userNotFound"),
+                  t("userNotFound"),
                 );
               } else if (
                 data.error === "Recipe already shared with this user"
               ) {
                 Alert.alert(
-                  "Already Shared",
-                  "You have already shared this recipe with that user.",
+                  t("alreadyShared"),
+                  t("alreadyShared"),
                 );
               } else {
-                Alert.alert("Error", data.error || "Failed to share recipe");
+                Alert.alert(t("error"), data.error || "Failed to share recipe");
               }
               return;
             }
-            Alert.alert("Success", "Recipe shared successfully!");
+            Alert.alert(t("success"), t("recipeSharedSuccess"));
           } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to share recipe");
+            Alert.alert(t("error"), error.message || "Failed to share recipe");
           } finally {
             setSharing(false);
           }
@@ -210,17 +228,60 @@ export default function DetailView() {
       setAndroidInputVisible(true);
     }
   };
+  
+  const handleShareRecipe = async () => {
+    setSharing(true);
+    try {
+      const auth_token = await AsyncStorage.getItem("auth_token");
+      if (!auth_token) {
+        Alert.alert(t("error"), "You must be logged in to share a recipe");
+        return;
+      }
+      
+      const response = await fetch(
+        "https://serenidad.click/mealpack/createShareLink",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            auth_token,
+            recipe_id: currentRecipe.id,
+          }),
+        },
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create share link");
+      }
+      
+      // Use native share functionality
+      if (Platform.OS === "ios" || Platform.OS === "android") {
+        await Share.share({
+          message: `Check out this recipe: ${currentRecipe.name}`,
+          url: data.share_link,
+        });
+      } else {
+        Alert.alert("Share Link", data.share_link);
+      }
+    } catch (error: any) {
+      Alert.alert(t("error"), error.message || "Failed to share recipe");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handleAndroidShare = async () => {
     if (!androidInput) {
-      Alert.alert("Error", "Please enter an email address.");
+      Alert.alert(t("error"), "Please enter an email address.");
       return;
     }
     setSharing(true);
     try {
       const auth_token = await AsyncStorage.getItem("auth_token");
       if (!auth_token) {
-        Alert.alert("Error", "You must be logged in to share a recipe");
+        Alert.alert(t("error"), "You must be logged in to share a recipe");
         return;
       }
       const response = await fetch(
@@ -238,24 +299,39 @@ export default function DetailView() {
       const data = await response.json();
       if (!response.ok) {
         if (data.error === "User with provided email not found") {
-          Alert.alert("User Not Found", "No user with that email exists.");
+          Alert.alert(t("userNotFound"), t("userNotFound"));
         } else if (data.error === "Recipe already shared with this user") {
           Alert.alert(
-            "Already Shared",
-            "You have already shared this recipe with that user.",
+            t("alreadyShared"),
+            t("alreadyShared"),
           );
         } else {
-          Alert.alert("Error", data.error || "Failed to share recipe");
+          Alert.alert(t("error"), data.error || "Failed to share recipe");
         }
         return;
       }
-      Alert.alert("Success", "Recipe shared successfully!");
+      Alert.alert(t("success"), t("recipeSharedSuccess"));
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to share recipe");
+      Alert.alert(t("error"), error.message || "Failed to share recipe");
     } finally {
       setSharing(false);
       setAndroidInputVisible(false);
       setAndroidInput("");
+    }
+  };
+
+  const handleAddToMyPack = async () => {
+    try {
+      await addToMyPack(currentRecipe.id);
+      // Re-fetch recipes to update state and menu
+      const data = await getRecipes();
+      setUserRecipes((data.recipes || []).filter((r: any) => r && r.id));
+      // Emit event with the new recipe object for list update
+      const newRecipe = (data.recipes || []).find((r: any) => r && r.id === currentRecipe.id);
+      if (newRecipe) recipeEvents.emit(newRecipe);
+      Alert.alert(t('success'), 'Recipe added to your recipes!');
+    } catch (error: any) {
+      Alert.alert(t('error'), error.message || 'Failed to add recipe');
     }
   };
 
@@ -264,7 +340,7 @@ export default function DetailView() {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ["Cancel", "Delete", "Share"],
+          options: [t("cancel"), t("delete"), t("share")],
           destructiveButtonIndex: 1,
           cancelButtonIndex: 0,
           userInterfaceStyle: "light",
@@ -273,12 +349,12 @@ export default function DetailView() {
           if (buttonIndex === 1) {
             // Delete
             Alert.alert(
-              "Delete Recipe",
-              "Are you sure you want to delete this recipe?",
+              t("deleteRecipe"),
+              t("deleteRecipeConfirm"),
               [
-                { text: "Cancel", style: "cancel" },
+                { text: t("cancel"), style: "cancel" },
                 {
-                  text: "Delete",
+                  text: t("delete"),
                   style: "destructive",
                   onPress: handleDeleteRecipe,
                 },
@@ -286,23 +362,23 @@ export default function DetailView() {
             );
           } else if (buttonIndex === 2) {
             // Share
-            Alert.alert("Share pressed");
+            Alert.alert(t("share"));
           }
         },
       );
     } else {
       // Fallback for Android
-      Alert.alert("Options", "", [
+      Alert.alert(t("options"), "", [
         {
-          text: "Delete",
+          text: t("delete"),
           onPress: () => {
             Alert.alert(
-              "Delete Recipe",
-              "Are you sure you want to delete this recipe?",
+              t("deleteRecipe"),
+              t("deleteRecipeConfirm"),
               [
-                { text: "Cancel", style: "cancel" },
+                { text: t("cancel"), style: "cancel" },
                 {
-                  text: "Delete",
+                  text: t("delete"),
                   style: "destructive",
                   onPress: handleDeleteRecipe,
                 },
@@ -311,8 +387,8 @@ export default function DetailView() {
           },
           style: "destructive",
         },
-        { text: "Share", onPress: () => Alert.alert("Share pressed") },
-        { text: "Cancel", style: "cancel" },
+        { text: t("share"), onPress: () => Alert.alert(t("share")) },
+        { text: t("cancel"), style: "cancel" },
       ]);
     }
   };
@@ -336,10 +412,15 @@ export default function DetailView() {
         isAuthor,
       );
       const actions = [
-        ...(isAuthor ? [{ title: 'Edit', systemIcon: 'pencil' }] : []),
-        { title: 'Share', systemIcon: 'square.and.arrow.up' },
-        { title: 'QR Code', systemIcon: 'qrcode' },
-        { title: 'Delete', systemIcon: 'trash', destructive: true },
+        // Only show Add to Recipes if not in user's recipes
+        ...(!isInUserRecipes ? [{ title: 'Add to Recipes', systemIcon: 'plus' }] : []),
+        // Only show share options if in user's recipes
+        ...(isInUserRecipes ? [
+          { title: t('share'), systemIcon: 'square.and.arrow.up' },
+          { title: t('shareByEmail'), systemIcon: 'envelope' },
+          { title: t('qrCode'), systemIcon: 'qrcode' },
+          { title: t('delete'), systemIcon: 'trash', destructive: true },
+        ] : []),
       ];
       navigation.setOptions({
         title: currentRecipe.name,
@@ -349,39 +430,32 @@ export default function DetailView() {
             dropdownMenuMode={true}
             onPress={(e) => {
               let offset = 0;
-              if (isAuthor) {
-                if (e.nativeEvent.index === 0) {
-                  // Edit
-                  router.push({
-                    pathname: "/edit",
-                    params: {
-                      recipe: JSON.stringify(currentRecipe),
-                      recipeId: currentRecipe.id,
-                      userId: userId,
-                    },
-                  });
-                  return;
-                }
-                offset = 1;
+              if (!isInUserRecipes && e.nativeEvent.index === 0) {
+                handleAddToMyPack();
+                return;
               }
-              if (e.nativeEvent.index === offset) {
-                handleShareRecipe();
-              } else if (e.nativeEvent.index === offset + 1) {
-                // Show QR Code modal
-                setQrModalVisible(true);
-              } else if (e.nativeEvent.index === offset + 2) {
-                Alert.alert(
-                  "Delete Recipe",
-                  "Are you sure you want to delete this recipe?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Delete",
-                      style: "destructive",
-                      onPress: handleDeleteRecipe,
-                    },
-                  ],
-                );
+              if (!isInUserRecipes) offset = 1;
+              if (isInUserRecipes) {
+                if (e.nativeEvent.index === offset) {
+                  handleShareRecipe();
+                } else if (e.nativeEvent.index === offset + 1) {
+                  handleShareByEmail();
+                } else if (e.nativeEvent.index === offset + 2) {
+                  setQrModalVisible(true);
+                } else if (e.nativeEvent.index === offset + 3) {
+                  Alert.alert(
+                    t('deleteRecipe'),
+                    t('deleteRecipeConfirm'),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      {
+                        text: t('delete'),
+                        style: 'destructive',
+                        onPress: handleDeleteRecipe,
+                      },
+                    ],
+                  );
+                }
               }
             }}
           >
@@ -392,12 +466,12 @@ export default function DetailView() {
         ),
       });
     }
-  }, [navigation, currentRecipe, userId]);
+  }, [navigation, currentRecipe, userId, t, isInUserRecipes]);
 
   if (!currentRecipe) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>No recipe data.</Text>
+        <Text>{t("noRecipeData")}</Text>
       </View>
     );
   }
@@ -460,7 +534,7 @@ export default function DetailView() {
               />
             )}
             <Text style={{ fontSize: 15, flex: 1 }}>
-              <Text style={{ fontWeight: 'bold' }}>{sharedBy.name}</Text> shared this recipe with you
+              <Text style={{ fontWeight: 'bold' }}>{sharedBy.name}</Text> {t("sharedByUser")}
             </Text>
           </View>
         )}
@@ -503,7 +577,7 @@ export default function DetailView() {
                 <Text
                   style={{ fontWeight: "bold", fontSize: 17, marginBottom: 8 }}
                 >
-                  Ingredients
+                  {t("ingredients")}
                 </Text>
                 {currentRecipe.ingredients.map((item: any, idx: number) => (
                   <View
@@ -533,7 +607,7 @@ export default function DetailView() {
               <Text
                 style={{ fontWeight: "bold", fontSize: 17, marginBottom: 8 }}
               >
-                Directions
+                {t("directions")}
               </Text>
               {currentRecipe.directions.map((item: any, idx: number) => (
                 <View
@@ -574,10 +648,9 @@ export default function DetailView() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.title}>Share Recipe</Text>
+            <Text style={styles.title}>{t("shareRecipeByEmail")}</Text>
             <Text>
-              Enter the email address of the person you want to share this
-              recipe with:
+              {t("enterEmailToShare")}
             </Text>
             <TextInput
               style={styles.input}
@@ -588,7 +661,7 @@ export default function DetailView() {
             />
             <View style={styles.buttonContainer}>
               <Button
-                title={sharing ? "Sharing..." : "Share"}
+                title={sharing ? t("loading") : t("share")}
                 onPress={handleAndroidShare}
                 disabled={sharing}
               />

@@ -11,10 +11,12 @@ import {
   View,
 } from "react-native";
 import { getToken } from "../utils/token";
+import { useTranslation } from "../utils/TranslationContext";
 import { uploadFile } from "../utils/uploadFile";
 
 export default function CreateView() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [recipeName, setRecipeName] = useState("");
   const [recipeDescription, setRecipeDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -186,7 +188,7 @@ export default function CreateView() {
           paddingHorizontal: 10,
           marginBottom: 10,
         }}
-        placeholder="Recipe Name"
+        placeholder={t('recipeName')}
         placeholderTextColor="#666"
         value={recipeName}
         onChangeText={setRecipeName}
@@ -225,7 +227,7 @@ export default function CreateView() {
                 }}
               >
                 <Text style={{ color: "white", textAlign: "center" }}>
-                  Uploading
+                  {t('loading')}
                 </Text>
                 <View
                   style={{
@@ -253,7 +255,7 @@ export default function CreateView() {
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#666" }}>Recipe Image</Text>
+          <Text style={{ color: "#666" }}>{t('recipeImage')}</Text>
         </Pressable>
       )}
 
@@ -269,7 +271,7 @@ export default function CreateView() {
           marginBottom: 10,
           textAlignVertical: "top",
         }}
-        placeholder="Recipe Description"
+        placeholder={t('recipeDescription')}
         placeholderTextColor="#666"
         value={recipeDescription}
         onChangeText={setRecipeDescription}
@@ -279,7 +281,7 @@ export default function CreateView() {
 
       {/* Ingredients Section */}
       <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Ingredients
+        {t('ingredients')}
       </Text>
       {ingredients.map((ingredient, index) => (
         <View
@@ -301,7 +303,7 @@ export default function CreateView() {
               borderRadius: 5,
               paddingHorizontal: 10,
             }}
-            placeholder="Add ingredient"
+            placeholder={t('addIngredient')}
             placeholderTextColor="#666"
             value={ingredient}
             onChangeText={(value) => updateIngredient(index, value)}
@@ -315,12 +317,12 @@ export default function CreateView() {
         </View>
       ))}
       <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+        <Text style={{ color: "#000000" }}>{t('addNewIngredient')}</Text>
       </Pressable>
 
       {/* Directions Section */}
       <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Directions
+        {t('directions')}
       </Text>
       {directions.map((direction, index) => (
         <View
@@ -342,7 +344,7 @@ export default function CreateView() {
               borderRadius: 5,
               paddingHorizontal: 10,
             }}
-            placeholder="Add direction"
+            placeholder={t('addDirection')}
             placeholderTextColor="#666"
             value={direction}
             onChangeText={(value) => updateDirection(index, value)}
@@ -356,7 +358,7 @@ export default function CreateView() {
         </View>
       ))}
       <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new direction</Text>
+        <Text style={{ color: "#000000" }}>{t('addNewDirection')}</Text>
       </Pressable>
 
       <Pressable
@@ -374,7 +376,7 @@ export default function CreateView() {
         }}
         disabled={loading || !isFormValid() || createLoading}
       >
-        <Text style={{ color: "white" }}>Create</Text>
+        <Text style={{ color: "white" }}>{t('create')}</Text>
       </Pressable>
       {loading && (
         <Text
@@ -385,7 +387,7 @@ export default function CreateView() {
             fontSize: 12,
           }}
         >
-          Awaiting image upload to be able to create recipe
+          {t('uploadingImage')}
         </Text>
       )}
       {createLoading && (
@@ -397,7 +399,7 @@ export default function CreateView() {
             fontSize: 12,
           }}
         >
-          Creating recipe...
+          {t('creatingRecipe')}
         </Text>
       )}
     </ScrollView>

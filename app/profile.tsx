@@ -4,8 +4,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import React, { useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import ContextMenu from 'react-native-context-menu-view';
 import { recipeEvents, userProfileEvents } from '../utils/events';
 import { getToken, removeToken } from '../utils/token';
+import { useTranslation } from '../utils/TranslationContext';
+import { Language } from '../utils/translations';
 
 const isValidEmail = (email: string) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -16,6 +19,8 @@ export default function ProfileView() {
   const params = useLocalSearchParams();
   const navigation = useNavigation();
   const router = useRouter();
+  const { t, language, setLanguage } = useTranslation();
+  
   let user = null;
   if (params.user) {
     try {
@@ -35,8 +40,12 @@ export default function ProfileView() {
   const [currentName, setCurrentName] = useState(user?.name || '');
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: 'Profile' });
-  }, [navigation]);
+    navigation.setOptions({ title: t('profile') });
+  }, [navigation, language]);
+
+  const handleLanguageChange = async (newLanguage: Language) => {
+    await setLanguage(newLanguage);
+  };
 
   const handleSignOut = async () => {
     recipeEvents.emitClear();
@@ -47,22 +56,22 @@ export default function ProfileView() {
 
   const handleDeleteAccount = () => {
     Alert.prompt(
-      'Delete Account',
-      'This action cannot be undone. All your recipes and data will be permanently deleted. Type "Delete My Account" to confirm.',
+      t('deleteAccount'),
+      t('deleteAccountPrompt'),
       [
         {
-          text: 'Cancel',
+          text: t('cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('delete'),
           style: 'destructive',
           onPress: async (text) => {
             if (text === 'Delete My Account') {
               try {
                 const token = await getToken();
                 if (!token) {
-                  Alert.alert('Error', 'You must be logged in to delete your account.');
+                  Alert.alert(t('error'), 'You must be logged in to delete your account.');
                   return;
                 }
 
@@ -83,10 +92,10 @@ export default function ProfileView() {
                 await AsyncStorage.removeItem('user_profile');
                 router.replace('/auth');
               } catch (error: any) {
-                Alert.alert('Error', error.message || 'Failed to delete account');
+                Alert.alert(t('error'), error.message || 'Failed to delete account');
               }
             } else {
-              Alert.alert('Error', 'Please type "Delete My Account" exactly to confirm deletion.');
+              Alert.alert(t('error'), 'Please type "Delete My Account" exactly to confirm deletion.');
             }
           },
         },
@@ -154,11 +163,11 @@ export default function ProfileView() {
       }
       setProfilePic(data.profile_picture_url);
       userProfileEvents.emit({ ...user, profile_picture_url: data.profile_picture_url, name: currentName });
-      Alert.alert('Success', 'Profile picture updated!');
+      Alert.alert(t('success'), t('profilePictureUpdated'));
     } catch (error: any) {
       setProfilePic(user?.profile_picture_url || null);
       userProfileEvents.emit({ ...user, profile_picture_url: user?.profile_picture_url || null, name: currentName });
-      Alert.alert('Error', error.message || 'Failed to upload profile picture');
+      Alert.alert(t('error'), error.message || 'Failed to upload profile picture');
     } finally {
       setUploading(false);
     }
@@ -195,11 +204,11 @@ export default function ProfileView() {
       }
       setEditingName(false);
       userProfileEvents.emit({ ...user, profile_picture_url: profilePic, name: nameInput.trim() });
-      Alert.alert('Success', 'Name updated!');
+      Alert.alert(t('success'), t('nameUpdated'));
     } catch (error: any) {
       setCurrentName(prevName);
       userProfileEvents.emit({ ...user, profile_picture_url: profilePic, name: prevName });
-      Alert.alert('Error', error.message || 'Failed to update name');
+      Alert.alert(t('error'), error.message || 'Failed to update name');
     } finally {
       setSavingName(false);
     }
@@ -285,7 +294,7 @@ export default function ProfileView() {
               alignItems: 'center',
             }}>
               <Text style={{ color: '#888', fontSize: 16, textAlign: 'center', paddingHorizontal: 10 }}>
-                {needsProfile ? 'Tap to upload profile picture' : 'Upload profile picture'}
+                {needsProfile ? t('tapToUploadProfilePicture') : t('uploadProfilePicture')}
               </Text>
               {uploading && (
                 <View style={{
@@ -326,7 +335,7 @@ export default function ProfileView() {
                 autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleNameSave}
-                placeholder={needsProfile ? 'Input Name' : ''}
+                placeholder={needsProfile ? t('inputName') : ''}
               />
               <Pressable onPress={handleNameSave} disabled={savingName} style={{ padding: 4 }}>
                 {savingName ? (
@@ -339,22 +348,22 @@ export default function ProfileView() {
           ) : (
             <>
               <Pressable onPress={() => setEditingName(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111', marginRight: 6 }}>{needsProfile && !currentName ? 'Input Name' : currentName}</Text>
+                <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111', marginRight: 6 }}>{needsProfile && !currentName ? t('inputName') : currentName}</Text>
                 <Ionicons name="pencil" size={20} color="#888" />
               </Pressable>
             </>
           )}
         </View>
-        <Text style={{ fontSize: 18, color: '#666', marginBottom: 8 }}>{user.email || 'Guest User'}</Text>
+        <Text style={{ fontSize: 18, color: '#666', marginBottom: 8 }}>{user.email || t('guestUser')}</Text>
       </View>
 
       {/* Connect Email Section for Guest Users */}
       {!user.email && (
         <View style={{ width: '100%', marginBottom: 24 }}>
           <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%', marginBottom: 16 }} />
-          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>Connect Your Email</Text>
+          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>{t('connectYourEmail')}</Text>
           <Text style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
-            Connect your email to enable recipe sharing and access all features.
+            {t('connectEmailDescription')}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
             <TextInput
@@ -367,7 +376,7 @@ export default function ProfileView() {
                 paddingHorizontal: 10,
                 marginRight: 10
               }}
-              placeholder="Enter your email"
+              placeholder={t('enterYourEmail')}
               keyboardType="email-address"
               autoCapitalize="none"
               value={nameInput}
@@ -376,14 +385,14 @@ export default function ProfileView() {
             <Pressable
               onPress={async () => {
                 if (!nameInput.trim() || !isValidEmail(nameInput.trim())) {
-                  Alert.alert('Error', 'Please enter a valid email address');
+                  Alert.alert(t('error'), 'Please enter a valid email address');
                   return;
                 }
                 try {
                   setSavingName(true);
                   const token = await getToken();
                   if (!token) {
-                    Alert.alert('Error', 'You must be logged in to connect your email');
+                    Alert.alert(t('error'), 'You must be logged in to connect your email');
                     return;
                   }
                   const response = await fetch('https://serenidad.click/mealpack/connectGuestAccount', {
@@ -399,10 +408,10 @@ export default function ProfileView() {
                   const updatedUser = { ...user, email: nameInput.trim() };
                   await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
                   userProfileEvents.emit(updatedUser);
-                  Alert.alert('Success', 'Email connected successfully!');
+                  Alert.alert(t('success'), t('emailConnectedSuccessfully'));
                   router.replace('/auth');
                 } catch (error: any) {
-                  Alert.alert('Error', error.message || 'Failed to connect email');
+                  Alert.alert(t('error'), error.message || 'Failed to connect email');
                 } finally {
                   setSavingName(false);
                 }
@@ -421,7 +430,7 @@ export default function ProfileView() {
               {savingName ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={{ color: 'white' }}>Connect</Text>
+                <Text style={{ color: 'white' }}>{t('connect')}</Text>
               )}
             </Pressable>
           </View>
@@ -431,6 +440,49 @@ export default function ProfileView() {
       {/* Divider and Actions */}
       <View style={{ width: '100%', marginTop: 0 }}>
         {/* Divider */}
+        <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%' }} />
+
+
+          <Pressable
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              paddingVertical: 18,
+              paddingHorizontal: 0,
+              width: '100%',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="language-outline" size={22} color="#222" style={{ marginRight: 14, marginLeft: 8 }} />
+              <Text style={{ color: '#222', fontSize: 17, fontWeight: '400' }}>{t('language')}</Text>
+            </View>
+                    {/* Language Selection Row */}
+        <ContextMenu
+          actions={[
+            { title: 'English', systemIcon: 'globe.americas' },
+            { title: '中文 (Mandarin)', systemIcon: 'globe.asia.australia' },
+            { title: 'Español (Spanish)', systemIcon: 'globe.europe.africa' },
+          ]}
+          dropdownMenuMode={true}
+          onPress={(e: { nativeEvent: { index: number } }) => {
+            if (e.nativeEvent.index === 0) {
+              handleLanguageChange('English');
+            } else if (e.nativeEvent.index === 1) {
+              handleLanguageChange('Mandarin');
+            } else if (e.nativeEvent.index === 2) {
+              handleLanguageChange('Spanish');
+            }
+          }}
+        >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ marginRight: 8, color: '#666' }}>
+                {language === 'Mandarin' ? '中文' : language === 'Spanish' ? 'Español' : 'English'}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </View>
+        </ContextMenu>
+                  </Pressable>
+
         <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%' }} />
 
         {/* Sign out row */}
@@ -445,7 +497,7 @@ export default function ProfileView() {
           }}
         >
           <Ionicons name="log-out-outline" size={22} color="#222" style={{ marginRight: 14, marginLeft: 8 }} />
-          <Text style={{ color: '#222', fontSize: 17, fontWeight: '400' }}>Sign out</Text>
+          <Text style={{ color: '#222', fontSize: 17, fontWeight: '400' }}>{t('signOut')}</Text>
         </Pressable>
         <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%' }} />
 
@@ -461,7 +513,7 @@ export default function ProfileView() {
           }}
         >
           <Ionicons name="trash-outline" size={22} color="#ff3b30" style={{ marginRight: 14, marginLeft: 8 }} />
-          <Text style={{ color: '#ff3b30', fontSize: 17, fontWeight: '400' }}>Delete Account</Text>
+          <Text style={{ color: '#ff3b30', fontSize: 17, fontWeight: '400' }}>{t('deleteAccount')}</Text>
         </Pressable>
         <View style={{ height: 1, backgroundColor: '#E5E5EA', width: '100%' }} />
       </View>

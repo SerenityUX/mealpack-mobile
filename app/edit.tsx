@@ -12,11 +12,13 @@ import {
 } from "react-native";
 import { recipeEvents } from "../utils/events";
 import { getToken } from "../utils/token";
+import { useTranslation } from "../utils/TranslationContext";
 import { uploadFile } from "../utils/uploadFile";
 
 export default function EditView() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { t } = useTranslation();
   const [recipeName, setRecipeName] = useState("");
   const [recipeDescription, setRecipeDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -65,7 +67,7 @@ export default function EditView() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== "granted") {
-      alert("Sorry, we need camera roll permissions to make this work!");
+      alert('Sorry, we need camera roll permissions to make this work!');
       return;
     }
 
@@ -208,7 +210,7 @@ export default function EditView() {
           paddingHorizontal: 10,
           marginBottom: 10,
         }}
-        placeholder="Recipe Name"
+        placeholder={t('recipeName')}
         placeholderTextColor="#666"
         value={recipeName}
         onChangeText={setRecipeName}
@@ -247,7 +249,7 @@ export default function EditView() {
                 }}
               >
                 <Text style={{ color: "white", textAlign: "center" }}>
-                  Uploading
+                  {t('loading')}
                 </Text>
                 <View
                   style={{
@@ -275,7 +277,7 @@ export default function EditView() {
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#666" }}>Recipe Image</Text>
+          <Text style={{ color: "#666" }}>{t('recipeImage')}</Text>
         </Pressable>
       )}
 
@@ -291,7 +293,7 @@ export default function EditView() {
           marginBottom: 10,
           textAlignVertical: "top",
         }}
-        placeholder="Recipe Description"
+        placeholder={t('recipeDescription')}
         placeholderTextColor="#666"
         value={recipeDescription}
         onChangeText={setRecipeDescription}
@@ -301,7 +303,7 @@ export default function EditView() {
 
       {/* Ingredients Section */}
       <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Ingredients
+        {t('ingredients')}
       </Text>
       {ingredients.map((ingredient, index) => (
         <View
@@ -323,7 +325,7 @@ export default function EditView() {
               borderRadius: 5,
               paddingHorizontal: 10,
             }}
-            placeholder="Add ingredient"
+            placeholder={t('addIngredient')}
             placeholderTextColor="#666"
             value={ingredient}
             onChangeText={(value) => updateIngredient(index, value)}
@@ -337,12 +339,12 @@ export default function EditView() {
         </View>
       ))}
       <Pressable onPress={addNewIngredient} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new ingredient</Text>
+        <Text style={{ color: "#000000" }}>{t('addNewIngredient')}</Text>
       </Pressable>
 
       {/* Directions Section */}
       <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
-        Directions
+        {t('directions')}
       </Text>
       {directions.map((direction, index) => (
         <View
@@ -364,7 +366,7 @@ export default function EditView() {
               borderRadius: 5,
               paddingHorizontal: 10,
             }}
-            placeholder="Add direction"
+            placeholder={t('addDirection')}
             placeholderTextColor="#666"
             value={direction}
             onChangeText={(value) => updateDirection(index, value)}
@@ -378,7 +380,7 @@ export default function EditView() {
         </View>
       ))}
       <Pressable onPress={addNewDirection} style={{ marginBottom: 20 }}>
-        <Text style={{ color: "#000000" }}>+ Add new direction</Text>
+        <Text style={{ color: "#000000" }}>{t('addNewDirection')}</Text>
       </Pressable>
 
       <Pressable
@@ -396,7 +398,7 @@ export default function EditView() {
         }}
         disabled={loading || !isFormValid() || editLoading}
       >
-        <Text style={{ color: "white" }}>Save Changes</Text>
+        <Text style={{ color: "white" }}>{t('saveChanges')}</Text>
       </Pressable>
       {loading && (
         <Text
@@ -407,7 +409,7 @@ export default function EditView() {
             fontSize: 12,
           }}
         >
-          Awaiting image upload to be able to save changes
+          {t('uploadingImage')}
         </Text>
       )}
       {editLoading && (
@@ -419,7 +421,7 @@ export default function EditView() {
             fontSize: 12,
           }}
         >
-          Saving changes...
+          {t('savingChanges')}
         </Text>
       )}
     </ScrollView>

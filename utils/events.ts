@@ -28,4 +28,19 @@ export const userProfileEvents = {
   emit: (profile: any) => {
     userProfileEvents.listeners.forEach(callback => callback(profile));
   }
+};
+
+export const bookEvents = {
+  listeners: [] as Array<(data: any) => void>,
+  
+  subscribe(callback: (data: any) => void) {
+    this.listeners.push(callback);
+    return () => {
+      this.listeners = this.listeners.filter(listener => listener !== callback);
+    };
+  },
+  
+  emit(data: any) {
+    this.listeners.forEach(listener => listener(data));
+  }
 }; 

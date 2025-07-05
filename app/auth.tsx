@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { createOTP, verifyOTP } from '../utils/OTPapi';
+import { useTranslation } from '../utils/TranslationContext';
 
 const log = (message: string, data?: any) => {
   if (__DEV__) {
@@ -21,6 +22,7 @@ const isValidEmail = (email: string) => {
 
 export default function AuthPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [keySent, setKeySent] = useState(false);
@@ -59,7 +61,7 @@ export default function AuthPage() {
     } catch (error) {
       log('Error in handleSendKey:', error);
       setError('Failed to send verification key');
-      Alert.alert('Error', 'Failed to send verification key');
+      Alert.alert(t('error'), 'Failed to send verification key');
     } finally {
       log('Finished OTP request');
       setLoading(false);
@@ -96,7 +98,7 @@ export default function AuthPage() {
     } catch (error) {
       log('Error in handleLogin:', error);
       setError('Invalid verification key');
-      Alert.alert('Error', 'Invalid verification key');
+      Alert.alert(t('error'), 'Invalid verification key');
     } finally {
       log('Finished login attempt');
       setLoading(false);
@@ -105,8 +107,8 @@ export default function AuthPage() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-      <Text style={{ fontSize: 24, marginBottom: 8 }}>Grab your Meal Pack</Text>
-      <Text style={{marginBottom: 16}}>Sign up or login with your email</Text>
+      <Text style={{ fontSize: 24, marginBottom: 8 }}>{t('welcomeToMealPack')}</Text>
+      <Text style={{marginBottom: 16}}>{t('continueWithEmail')}</Text>
       
       <View style={{ 
         flexDirection: 'row', 
@@ -125,7 +127,7 @@ export default function AuthPage() {
             paddingHorizontal: 10,
             marginRight: 10
           }}
-          placeholder="Email"
+          placeholder={t('enterEmail')}
           value={email}
           onChangeText={handleEmailChange}
           keyboardType="email-address"
@@ -152,7 +154,7 @@ export default function AuthPage() {
             {loading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={{ color: 'white' }}>{keySent ? 'Key Sent' : 'Send Key'}</Text>
+              <Text style={{ color: 'white' }}>{keySent ? t('resendCode') : t('continue')}</Text>
             )}
           </Pressable>
         )}
@@ -175,7 +177,7 @@ export default function AuthPage() {
               paddingHorizontal: 10,
               marginBottom: 20
             }}
-            placeholder="Verification Key"
+            placeholder={t('enterVerificationCode')}
             value={code}
             onChangeText={(text) => {
               log('Verification code changed:', text);
@@ -204,7 +206,7 @@ export default function AuthPage() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={{ color: 'white' }}>Login</Text>
+                <Text style={{ color: 'white' }}>{t('continue')}</Text>
               )}
             </Pressable>
           )}
@@ -212,34 +214,34 @@ export default function AuthPage() {
       )}
 
       <Text style={{ color: '#666', fontSize: 11, marginTop: 24, marginBottom: 0, textAlign: 'center', lineHeight: 18 }}>
-        By continuing you agree to{' '}
+        {t('byCreatingAccount')}{' '}
         <Text
           style={{ color: '#007AFF', textDecorationLine: 'underline' }}
           onPress={() => Linking.openURL('https://serenidad.click/mealpack/tos')}
         >
-          terms & conditions
+          {t('termsOfService')}
         </Text>
         {' '} &amp;{' '}
         <Text
           style={{ color: '#007AFF', textDecorationLine: 'underline' }}
           onPress={() => Linking.openURL('https://serenidad.click/mealpack/pp')}
         >
-          privacy policy
+          {t('privacyPolicy')}
         </Text>
       </Text>
 
       <Pressable 
         onPress={() => {
           Alert.alert(
-            'Continue as Guest',
+            t('continueAsGuest'),
             'Users will not be able to share recipes with you until you connect your email.',
             [
               {
-                text: 'Cancel',
+                text: t('cancel'),
                 style: 'cancel'
               },
               {
-                text: 'Continue as Guest',
+                text: t('continueAsGuest'),
                 onPress: async () => {
                   try {
                     setLoading(true);
@@ -254,7 +256,7 @@ export default function AuthPage() {
                     await AsyncStorage.setItem('auth_token', data.auth_token);
                     router.push('/list');
                   } catch (error: any) {
-                    Alert.alert('Error', error.message || 'Failed to create guest account');
+                    Alert.alert(t('error'), error.message || 'Failed to create guest account');
                   } finally {
                     setLoading(false);
                   }
@@ -265,7 +267,7 @@ export default function AuthPage() {
         }}
       >
         <Text style={{ color: '#007AFF', fontSize: 11, marginTop: 8, textAlign: 'center' }}>
-          Skip signup and continue as guest
+          {t('continueAsGuest')}
         </Text>
       </Pressable>
 

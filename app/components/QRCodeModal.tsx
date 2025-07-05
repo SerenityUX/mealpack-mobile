@@ -11,7 +11,7 @@ interface QRCodeModalProps {
 }
 
 export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: QRCodeModalProps) {
-  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentLogoIndex, setCurrentLogoIndex] = useState(0);
@@ -27,10 +27,10 @@ export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: 
   
   useEffect(() => {
     if (visible) {
-      createShareCode();
+      createShareLink();
     } else {
       // Reset state when modal closes
-      setShareCode(null);
+      setShareLink(null);
       setLoading(true);
       setError(null);
       setCurrentLogoIndex(0);
@@ -48,7 +48,7 @@ export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: 
     return () => clearInterval(interval);
   }, [visible, loading, error, logoImages.length]);
   
-  const createShareCode = async () => {
+  const createShareLink = async () => {
     setLoading(true);
     setError(null);
     
@@ -60,7 +60,7 @@ export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: 
         return;
       }
       
-      const response = await fetch('https://serenidad.click/mealpack/createShareCode', {
+      const response = await fetch('https://serenidad.click/mealpack/createShareLink', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,20 +74,17 @@ export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: 
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create share code');
+        throw new Error(data.error || 'Failed to create share link');
       }
       
-      setShareCode(data.share_code);
+      setShareLink(data.share_link);
     } catch (error: any) {
-      setError(error.message || 'Failed to create share code');
-      console.error('Error creating share code:', error);
+      setError(error.message || 'Failed to create share link');
+      console.error('Error creating share link:', error);
     } finally {
       setLoading(false);
     }
   };
-  
-  // Create a deep link URL using the app scheme and share code
-  const deepLinkUrl = shareCode ? `mealpack-mobile://claim/${shareCode}` : '';
   
   // Get the current logo
   const currentLogo = logoImages[currentLogoIndex];
@@ -109,7 +106,7 @@ export default function QRCodeModal({ visible, onClose, recipeId, recipeName }: 
                 <Text style={styles.errorText}>{error}</Text>
               ) : (
                 <QRCode
-                  value={deepLinkUrl}
+                  value={shareLink || ''}
                   size={150}
                   backgroundColor="white"
                   color="black"
